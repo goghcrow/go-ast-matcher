@@ -179,3 +179,37 @@ func TestGrepNestedLambda(t *testing.T) {
 		})
 	})
 }
+
+func TestGrepInterface(t *testing.T) {
+	// 通过声明直接判断
+	WalkDir(TestDir, func(filename string, m *Matcher, file *ast.File) {
+		pattern := &ast.TypeSpec{
+			Type: &ast.InterfaceType{},
+		}
+		m.Match(pattern, file, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
+			typeSpec := c.Node().(*ast.TypeSpec)
+			fmt.Println("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
+			fmt.Println(ansi.Blue.Text(m.ShowPos(typeSpec)))
+			fmt.Println(m.ShowNode(typeSpec))
+			fmt.Println("↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑")
+		})
+	})
+
+	// 通过类型判断, 可以识别 underlying
+	WalkDir(TestDir, func(filename string, m *Matcher, file *ast.File) {
+		pattern := &ast.TypeSpec{
+			Name: BindWith[IdentPattern](m, "typeName", Wildcard[IdentPattern](m)),
+		}
+		m.Match(pattern, file, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
+			id := binds["typeName"].(*ast.Ident)
+			iface, _ := m.TypeOf(id).Underlying().(*types.Interface)
+			if iface == nil {
+				return
+			}
+			fmt.Println("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
+			fmt.Println(ansi.Blue.Text(m.ShowPos(c.Node())))
+			fmt.Println(m.ShowNode(c.Node()))
+			fmt.Println("↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑")
+		})
+	})
+}
