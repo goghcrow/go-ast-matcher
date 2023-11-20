@@ -6,7 +6,6 @@ import (
 	"go/token"
 	"go/types"
 	"reflect"
-	"strconv"
 	"strings"
 
 	"golang.org/x/tools/go/ast/astutil"
@@ -41,7 +40,7 @@ type Matcher struct {
 	// index: (BadExpr|BadStmt|BadDecl).FromPos
 	// ImportSpec.EndPos
 	// Ident.NamePos
-	// Field.Tag.ValuePos
+	// Field.Doc.List[0].Slash
 	// BasicLit.ValuePos
 	// FieldList.Opening
 	// CallExpr.Lparen
@@ -52,13 +51,11 @@ type Matcher struct {
 
 type MatchFlags struct {
 	UnparenExpr       bool
-	WithStack         bool
 	MatchCallEllipsis bool
 }
 type MatchOption func(*MatchFlags)
 
 func UnparenExpr() MatchOption       { return func(opts *MatchFlags) { opts.UnparenExpr = true } }
-func WithStack() MatchOption         { return func(opts *MatchFlags) { opts.WithStack = true } }
 func MatchCallEllipsis() MatchOption { return func(opts *MatchFlags) { opts.MatchCallEllipsis = true } }
 
 func NewMatcher(
@@ -67,9 +64,7 @@ func NewMatcher(
 	pkg *packages.Package,
 	opts ...MatchOption,
 ) *Matcher {
-	flags := &MatchFlags{
-		WithStack: true,
-	}
+	flags := &MatchFlags{}
 	for _, opt := range opts {
 		opt(flags)
 	}
@@ -92,16 +87,10 @@ type Callback func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds)
 type stackBuilder func(node ast.Node) []ast.Node
 
 func (m *Matcher) Match(pattern, node ast.Node, f Callback) {
-	var buildStack stackBuilder
-	if m.WithStack {
-		buildStack = m.mkStackBuilder(node)
-	}
+	buildStack := m.mkStackBuilder(node)
 	postOrder(node, func(c *astutil.Cursor) bool {
 		n := c.Node()
-		var stack []ast.Node
-		if m.WithStack {
-			stack = buildStack(n)
-		}
+		stack := buildStack(n)
 		binds := mkBinds()
 		if m.match(pattern, n, stack, binds) {
 			f(m, c, stack, binds)
@@ -226,65 +215,6 @@ func (m *Matcher) match(x, y ast.Node, stack []ast.Node, binds Binds) bool {
 	return false
 }
 
-func (m *Matcher) matchStmts(xs, ys []ast.Stmt, stack []ast.Node, binds Binds) bool {
-	if matchFun := m.TryGetStmtsMatchFun(xs); matchFun != nil {
-		return matchFun(m, StmtsNode(ys), stack, binds)
-	}
-
-	if len(xs) != len(ys) {
-		return false
-	}
-	for i := range xs {
-		if !m.matchStmt(xs[i], ys[i], stack, binds) {
-			return false
-		}
-	}
-	return true
-}
-
-func (m *Matcher) matchExprs(xs, ys []ast.Expr, stack []ast.Node, binds Binds) bool {
-	if matchFun := m.TryGetExprsMatchFun(xs); matchFun != nil {
-		return matchFun(m, ExprsNode(ys), stack, binds)
-	}
-
-	if len(xs) != len(ys) {
-		return false
-	}
-	for i := range xs {
-		if !m.matchExpr(xs[i], ys[i], stack, binds) {
-			return false
-		}
-	}
-	return true
-}
-
-func (m *Matcher) matchIdents(xs, ys []*ast.Ident, stack []ast.Node, binds Binds) bool {
-	if matchFun := m.TryGetIdentsMatchFun(xs); matchFun != nil {
-		return matchFun(m, IdentsNode(ys), stack, binds)
-	}
-	if len(xs) != len(ys) {
-		return false
-	}
-	for i := range xs {
-		if !m.matchIdent(xs[i], ys[i], stack, binds) {
-			return false
-		}
-	}
-	return true
-}
-
-func (m *Matcher) matchSpecs(xs, ys []ast.Spec, stack []ast.Node, binds Binds) bool {
-	if len(xs) != len(ys) {
-		return false
-	}
-	for i := range xs {
-		if !m.matchSpec(xs[i], ys[i], stack, binds) {
-			return false
-		}
-	}
-	return true
-}
-
 func (m *Matcher) matchSpec(x, y ast.Spec, stack []ast.Node, binds Binds) bool {
 	if IsNilNode(x) {
 		return true
@@ -311,17 +241,18 @@ func (m *Matcher) matchSpec(x, y ast.Spec, stack []ast.Node, binds Binds) bool {
 		if !m.matchIdent(x.Name, y.Name, stack, binds) {
 			return false
 		}
-		xp, _ := strconv.Unquote(x.Path.Value)
-		yp, _ := strconv.Unquote(y.Path.Value)
-		return xp == yp
+		// import path 一定是 string literal
+		// xp, _ := strconv.Unquote(x.Path.Value)
+		// yp, _ := strconv.Unquote(y.Path.Value)
+		// return xp == yp
+		return m.matchBasicLit(x.Path, y.Path, stack, binds)
 
 	case *ast.ValueSpec:
 		y := y.(*ast.ValueSpec)
 		if y == nil {
 			return false
 		}
-		return len(x.Names) == len(y.Names) &&
-			m.matchIdents(x.Names, y.Names, stack, binds) &&
+		return m.matchIdents(x.Names, y.Names, stack, binds) &&
 			m.matchExpr(x.Type, y.Type, stack, binds) &&
 			m.matchExprs(x.Values, y.Values, stack, binds)
 
@@ -361,7 +292,7 @@ func (m *Matcher) matchDecl(x, y ast.Decl, stack []ast.Node, binds Binds) bool {
 		if y == nil {
 			return false
 		}
-		return x.Tok == y.Tok &&
+		return m.matchToken(x.Tok, y.Tok, stack, binds) &&
 			m.matchSpecs(x.Specs, y.Specs, stack, binds)
 
 	case *ast.FuncDecl:
@@ -608,17 +539,7 @@ func (m *Matcher) matchExpr(x, y ast.Expr, stack []ast.Node, binds Binds) bool {
 
 	case *ast.BasicLit:
 		y := y.(*ast.BasicLit)
-		if matchFun := m.TryGetBasicLitMatchFun(x); matchFun != nil {
-			return matchFun(m, y, stack, binds)
-		}
-		if y == nil {
-			return false
-		}
-		// 注意: BasicLit 是原子 Pattern, 不支持展开匹配, 比如展开匹配 Kind
-		// 且字面量需要用 constant.Compare 判断, 不能只看 Kind
-		xVal := constant.MakeFromLiteral(x.Value, x.Kind, 0)
-		yVal := constant.MakeFromLiteral(y.Value, y.Kind, 0)
-		return constant.Compare(xVal, token.EQL, yVal)
+		return m.matchBasicLit(x, y, stack, binds)
 	case *ast.FuncLit:
 		y := y.(*ast.FuncLit)
 		if y == nil {
@@ -800,6 +721,23 @@ func (m *Matcher) matchIdent(x, y *ast.Ident, stack []ast.Node, binds Binds) boo
 	return x.Name == y.Name
 }
 
+func (m *Matcher) matchBasicLit(x, y *ast.BasicLit, stack []ast.Node, binds Binds) bool {
+	if x == nil {
+		return true
+	}
+	if matchFun := m.TryGetBasicLitMatchFun(x); matchFun != nil {
+		return matchFun(m, y, stack, binds)
+	}
+	if y == nil {
+		return false
+	}
+	// 注意: BasicLit 是原子 Pattern, 不支持展开匹配, 比如展开匹配 Kind
+	// 且字面量需要用 constant.Compare 判断, 不能只看 Kind
+	xVal := constant.MakeFromLiteral(x.Value, x.Kind, 0)
+	yVal := constant.MakeFromLiteral(y.Value, y.Kind, 0)
+	return constant.Compare(xVal, token.EQL, yVal)
+}
+
 func (m *Matcher) matchToken(x, y token.Token, stack []ast.Node, binds Binds) bool {
 	if matchFun := m.TryGetTokenMatchFun(x); matchFun != nil {
 		return matchFun(m, TokenNode(y), stack, binds)
@@ -807,10 +745,82 @@ func (m *Matcher) matchToken(x, y token.Token, stack []ast.Node, binds Binds) bo
 	return x == y
 }
 
+func (m *Matcher) matchStmts(xs, ys []ast.Stmt, stack []ast.Node, binds Binds) bool {
+	if xs == nil {
+		return true
+	}
+	if matchFun := m.TryGetStmtsMatchFun(xs); matchFun != nil {
+		return matchFun(m, StmtsNode(ys), stack, binds)
+	}
+	if len(xs) != len(ys) {
+		return false
+	}
+	for i := range xs {
+		if !m.matchStmt(xs[i], ys[i], stack, binds) {
+			return false
+		}
+	}
+	return true
+}
+
+func (m *Matcher) matchExprs(xs, ys []ast.Expr, stack []ast.Node, binds Binds) bool {
+	if xs == nil {
+		return true
+	}
+	if matchFun := m.TryGetExprsMatchFun(xs); matchFun != nil {
+		return matchFun(m, ExprsNode(ys), stack, binds)
+	}
+	if len(xs) != len(ys) {
+		return false
+	}
+	for i := range xs {
+		if !m.matchExpr(xs[i], ys[i], stack, binds) {
+			return false
+		}
+	}
+	return true
+}
+
+func (m *Matcher) matchIdents(xs, ys []*ast.Ident, stack []ast.Node, binds Binds) bool {
+	if xs == nil {
+		return true
+	}
+	if matchFun := m.TryGetIdentsMatchFun(xs); matchFun != nil {
+		return matchFun(m, IdentsNode(ys), stack, binds)
+	}
+	if len(xs) != len(ys) {
+		return false
+	}
+	for i := range xs {
+		if !m.matchIdent(xs[i], ys[i], stack, binds) {
+			return false
+		}
+	}
+	return true
+}
+
+func (m *Matcher) matchSpecs(xs, ys []ast.Spec, stack []ast.Node, binds Binds) bool {
+	if xs == nil {
+		return true
+	}
+	if matchFun := m.TryGetSpecsMatchFun(xs); matchFun != nil {
+		return matchFun(m, SpecsNode(ys), stack, binds)
+	}
+	if len(xs) != len(ys) {
+		return false
+	}
+	for i := range xs {
+		if !m.matchSpec(xs[i], ys[i], stack, binds) {
+			return false
+		}
+	}
+	return true
+}
+
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ etc ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 func (m *Matcher) ShowPos(n ast.Node) string {
-	return ShowPos(m.FileSet, n)
+	return ShowPos(m.FileSet, n).String()
 }
 
 func (m *Matcher) ShowNode(n ast.Node) string {

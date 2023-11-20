@@ -8,10 +8,10 @@ import (
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Pattern ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 // 如何加入新的 Pattern (but, 应该加的差不多了)
-// 0. 声明 XXXPattern 类型, 加入 Pattern
+// 0. 声明 XXXPattern 类型, 加入 Pattern interface
 // 1. 加 MkXXXPattern && MkPattern
 // 2. 加 TryGetXXXMatchFun & TryGetMatchFun
-// 3. 加 MkXXXPatternVar & MkPatternVar
+// 3. 加 MkXXXPatternVar & MkVar
 // 4. Hook Matcher, 调用 TryGetXXXMatchFun
 
 // 注意: BasicLit 是原子 Pattern, 不支持展开匹配, 比如展开匹配 Kind
@@ -19,13 +19,16 @@ import (
 
 type (
 	Pattern interface {
-		NodePattern | StmtPattern | ExprPattern | DeclPattern |
+		NodePattern | StmtPattern | ExprPattern | DeclPattern | SpecPattern |
 			IdentPattern | FieldPattern | FieldListPattern |
 			CallExprPattern | FuncTypePattern | BlockStmtPattern | TokenPattern | BasicLitPattern |
-			StmtsPattern | ExprsPattern | IdentsPattern | FieldsPattern
+			SlicePattern
 	}
 	TypingPattern interface {
 		IdentPattern | ExprPattern
+	}
+	SlicePattern interface {
+		StmtsPattern | ExprsPattern | SpecsPattern | IdentsPattern | FieldsPattern
 	}
 
 	NodePattern      = MatchFun
@@ -43,6 +46,7 @@ type (
 	TokenPattern     = token.Token   // 用来匹配 token 类型
 	StmtsPattern     = []ast.Stmt
 	ExprsPattern     = []ast.Expr
+	SpecsPattern     = []ast.Spec
 	IdentsPattern    = []*ast.Ident // 用来匹配 Field.Name 等
 	FieldsPattern    = []*ast.Field
 	// ChanDirPattern = ast.ChanDir // 不需要, 就俩值, 外层用 Or 匹配就行了
@@ -87,8 +91,18 @@ func (m *Matcher) MkIdentPattern(f MatchFun) IdentPattern {
 // MkFieldPattern 回调 node 参数类型 *ast.Field
 func (m *Matcher) MkFieldPattern(f MatchFun) FieldPattern {
 	m.funs = append(m.funs, f)
-	// 放到 tag 上防止歧义, 如果放到 Type 上, 会与 Field{ Type: MkExprPattern() } 歧义
-	return &ast.Field{Tag: &ast.BasicLit{ValuePos: token.Pos(-len(m.funs))}}
+	// 放到 Type/Tag/Name 都会有歧义,
+	// e.g. Field{ Type: MkExprPattern() }
+	// e.g. Field{ Tag: MkBasicLitPattern() }
+	// e.g. Field{ Name: MkIdentsPattern() }
+	return &ast.Field{
+		Doc: &ast.CommentGroup{
+			List: []*ast.Comment{
+				{Slash: token.Pos(-len(m.funs))},
+				nil,
+			},
+		},
+	}
 }
 
 // MkFieldListPattern 回调 node 参数类型 *ast.FieldList
@@ -140,6 +154,11 @@ func (m *Matcher) MkStmtsPattern(f MatchFun) StmtsPattern {
 // MkExprsPattern 回调 node 参数类型 ExprsNode
 func (m *Matcher) MkExprsPattern(f MatchFun) ExprsPattern {
 	return []ast.Expr{m.MkExprPattern(f), nil}
+}
+
+// MkSpecsPattern 回调 node 参数类型 SpecsNode
+func (m *Matcher) MkSpecsPattern(f MatchFun) SpecsPattern {
+	return []ast.Spec{m.MkSpecPattern(f), nil}
 }
 
 // MkIdentsPattern 回调 node 参数类型 IdentsNode
@@ -195,8 +214,11 @@ func (m *Matcher) TryGetIdentMatchFun(x *ast.Ident) MatchFun {
 }
 
 func (m *Matcher) TryGetFieldMatchFun(x *ast.Field) MatchFun {
-	if x != nil && x.Tag != nil && x.Tag.ValuePos < 0 {
-		return m.funs[-x.Tag.ValuePos-1]
+	if x != nil && x.Doc != nil &&
+		len(x.Doc.List) == 2 &&
+		x.Doc.List[0].Slash < 0 &&
+		x.Doc.List[1] == nil {
+		return m.funs[-x.Doc.List[0].Slash-1]
 	}
 	return nil
 }
@@ -255,6 +277,13 @@ func (m *Matcher) TryGetExprsMatchFun(xs []ast.Expr) MatchFun {
 		return nil
 	}
 	return m.TryGetExprMatchFun(xs[0])
+}
+
+func (m *Matcher) TryGetSpecsMatchFun(xs []ast.Spec) MatchFun {
+	if len(xs) != 2 || xs[1] != nil {
+		return nil
+	}
+	return m.TryGetSpecMatchFun(xs[0])
 }
 
 func (m *Matcher) TryGetIdentsMatchFun(xs []*ast.Ident) MatchFun {
@@ -378,6 +407,13 @@ func (m *Matcher) MkExprsPatternVar(name string) ExprsPattern {
 	})
 }
 
+func (m *Matcher) MkSpecsPatternVar(name string) SpecsPattern {
+	return m.MkSpecsPattern(func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		binds[name] = n
+		return true
+	})
+}
+
 func (m *Matcher) MkIdentsPatternVar(name string) IdentsPattern {
 	return m.MkIdentsPattern(func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
 		binds[name] = n
@@ -398,6 +434,7 @@ type (
 	MatchFun   func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool
 	StmtsNode  []ast.Stmt   // 用于 StmtsPattern 回调参数
 	ExprsNode  []ast.Expr   // 用于 ExprsPattern 回调参数
+	SpecsNode  []ast.Spec   // 用于 SpecsPattern 回调参数
 	IdentsNode []*ast.Ident // 用于 IdentsPattern 回调参数
 	FieldsNode []*ast.Field // 用于 FieldsPattern 回调参数
 	TokenNode  token.Token  // 用于 TokenPattern 回调参数
@@ -409,6 +446,8 @@ func (StmtsNode) Pos() token.Pos  { return token.NoPos }
 func (StmtsNode) End() token.Pos  { return token.NoPos }
 func (ExprsNode) Pos() token.Pos  { return token.NoPos }
 func (ExprsNode) End() token.Pos  { return token.NoPos }
+func (SpecsNode) Pos() token.Pos  { return token.NoPos }
+func (SpecsNode) End() token.Pos  { return token.NoPos }
 func (IdentsNode) Pos() token.Pos { return token.NoPos }
 func (IdentsNode) End() token.Pos { return token.NoPos }
 func (FieldsNode) Pos() token.Pos { return token.NoPos }

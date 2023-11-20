@@ -1,0 +1,22 @@
+basiclit
+-- a.go --
+package main
+
+import "basic_lit"
+
+type x struct {
+    Field `json: "hello"`
+}
+
+func main() {
+    _ = "Hello"
+}
+
+-- import.stdout --
+node: "basic_lit"
+pos : a.go:3:8
+var : "basic_lit"
+
+-- tag.stdout --
+pos : a.go:6:11
+var : `json: "hello"`

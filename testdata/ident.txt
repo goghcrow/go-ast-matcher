@@ -1,0 +1,136 @@
+ident
+
+-- a.go --
+package main
+
+import "fmt"
+
+var id int = 42
+
+const (
+    U = 42
+    PI = 3.14
+)
+
+func main() {
+    id := 1
+    fmt.Println(id)
+    Entity{ID: 42}.ID
+}
+
+type Entity struct {
+     ID int
+}
+
+type Alias Entity
+
+-- gen_decl_var.stdout --
+node: var id int = 42
+var : id int = 42
+
+-- gen_decl_const.stdout --
+node: const (
+	U	= 42
+	PI	= 3.14
+)
+var : U = 42
+PI = 3.14
+
+-- val_spec.stdout --
+node: id int = 42
+var : id
+
+-- func_name.stdout --
+node: func main() {
+	id := 1
+	fmt.Println(id)
+	Entity{ID: 42}.ID
+}
+pos : a.go:12:6
+var : main
+
+-- int.stdout --
+node: id
+pos : a.go:5:5
+var : id
+
+node: id
+pos : a.go:13:5
+var : id
+
+node: id
+pos : a.go:14:17
+var : id
+
+-- wildcard.stdout --
+node: main
+pos : a.go:1:9
+var : main
+
+node: id
+pos : a.go:5:5
+var : id
+
+node: int
+pos : a.go:5:8
+var : int
+
+node: U
+pos : a.go:8:5
+var : U
+
+node: PI
+pos : a.go:9:5
+var : PI
+
+node: main
+pos : a.go:12:6
+var : main
+
+node: id
+pos : a.go:13:5
+var : id
+
+node: fmt
+pos : a.go:14:5
+var : fmt
+
+node: Println
+pos : a.go:14:9
+var : Println
+
+node: id
+pos : a.go:14:17
+var : id
+
+node: Entity
+pos : a.go:15:5
+var : Entity
+
+node: ID
+pos : a.go:15:12
+var : ID
+
+node: ID
+pos : a.go:15:20
+var : ID
+
+node: Entity
+pos : a.go:18:6
+var : Entity
+
+node: ID
+pos : a.go:19:6
+var : ID
+
+node: int
+pos : a.go:19:9
+var : int
+
+node: Alias
+pos : a.go:22:6
+var : Alias
+
+node: Entity
+pos : a.go:22:12
+var : Entity

@@ -10,10 +10,92 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
 )
+
+// ↓↓↓↓↓↓↓↓↓↓↓↓ Type ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+type typeX string
+
+var TypeX typeX
+
+func (typeX) Implements(v types.Type, iface *types.Interface) bool {
+	return types.Implements(v, iface) ||
+		types.Implements(types.NewPointer(v), iface)
+}
+func (typeX) TypeId(obj types.Object) string {
+	pkg := obj.Pkg()
+	name := obj.Name()
+	if pkg != nil && pkg.Path() != "" {
+		return pkg.Path() + "." + name
+	} else {
+		return name
+	}
+}
+func (typeX) DerefUnder(ty types.Type) types.Type {
+	for {
+		if ptr, ok := ty.(*types.Pointer); ok {
+			ty = ptr.Elem()
+		} else {
+			break
+		}
+	}
+	return ty.Underlying()
+}
+
+// ↓↓↓↓↓↓↓↓↓↓↓↓ Show ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+func ShowNode(fset *token.FileSet, n ast.Node) string {
+	// 处理自定义的 Node 类型
+	switch n := n.(type) {
+	case MatchFun:
+		return "match-fun"
+	case StmtsNode:
+		xs := make([]string, len(n))
+		for i, it := range n {
+			xs[i] = ShowNode(fset, it)
+		}
+		return strings.Join(xs, "\n")
+	case ExprsNode:
+		xs := make([]string, len(n))
+		for i, it := range n {
+			xs[i] = ShowNode(fset, it)
+		}
+		return strings.Join(xs, "\n")
+	case SpecsNode:
+		xs := make([]string, len(n))
+		for i, it := range n {
+			xs[i] = ShowNode(fset, it)
+		}
+		return strings.Join(xs, "\n")
+	case IdentsNode:
+		xs := make([]string, len(n))
+		for i, it := range n {
+			xs[i] = ShowNode(fset, it)
+		}
+		return strings.Join(xs, "\n")
+	case FieldsNode:
+		xs := make([]string, len(n))
+		for i, it := range n {
+			xs[i] = ShowNode(fset, it)
+		}
+		return strings.Join(xs, "\n")
+	case TokenNode:
+		return token.Token(n).String()
+	}
+
+	var buf bytes.Buffer
+	_ = printer.Fprint(&buf, fset, n)
+	return buf.String()
+}
+func ShowPos(fset *token.FileSet, n ast.Node) token.Position {
+	return fset.Position(n.Pos())
+}
+
+// ↓↓↓↓↓↓↓↓↓↓↓↓ IsNilNode ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 // IsNilNode 解决参数是接口类型判空的问题
 func IsNilNode(n ast.Node) bool {
@@ -29,41 +111,7 @@ func IsNilNode(n ast.Node) bool {
 	return false
 }
 
-func TypeImplements(v types.Type, iface *types.Interface) bool {
-	return types.Implements(v, iface) ||
-		types.Implements(types.NewPointer(v), iface)
-}
-
-func TypeId(obj types.Object) string {
-	pkg := obj.Pkg()
-	name := obj.Name()
-	if pkg != nil && pkg.Path() != "" {
-		return pkg.Path() + "." + name
-	} else {
-		return name
-	}
-}
-
-func DerefUnder(ty types.Type) types.Type {
-	for {
-		if ptr, ok := ty.(*types.Pointer); ok {
-			ty = ptr.Elem()
-		} else {
-			break
-		}
-	}
-	return ty.Underlying()
-}
-
-func ShowNode(fset *token.FileSet, n ast.Node) string {
-	var buf bytes.Buffer
-	_ = printer.Fprint(&buf, fset, n)
-	return buf.String()
-}
-
-func ShowPos(fset *token.FileSet, n ast.Node) string {
-	return fset.Position(n.Pos()).String()
-}
+// ↓↓↓↓↓↓↓↓↓↓↓↓ IO ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 func LoadDir(dir string) (*token.FileSet, []*packages.Package) {
 	dir, err := filepath.Abs(dir)
@@ -103,6 +151,8 @@ func FormatFile(fset *token.FileSet, f *ast.File) []byte {
 	panicIfErr(err)
 	return buf.Bytes()
 }
+
+// ↓↓↓↓↓↓↓↓↓↓↓↓ Others ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 func preOrder(root ast.Node, f astutil.ApplyFunc) {
 	astutil.Apply(root, f, nil)

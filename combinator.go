@@ -40,6 +40,8 @@ func MkPattern[T Pattern](m *Matcher, f MatchFun) T {
 		return any(m.MkStmtsPattern(f)).(T)
 	case ExprsPattern:
 		return any(m.MkExprsPattern(f)).(T)
+	case SpecsPattern:
+		return any(m.MkSpecsPattern(f)).(T)
 	case IdentsPattern:
 		return any(m.MkIdentsPattern(f)).(T)
 	case FieldsPattern:
@@ -69,6 +71,7 @@ func IsPattern[T Pattern](m *Matcher, n any) bool {
 // T 为 BasicLitPattern, n 需要 *ast.BasicLit
 // T 为 StmtsPattern, n 需要 []ast.Stmt
 // T 为 ExprsPattern, n 需要 []ast.Expr
+// T 为 SpecsPattern, n 需要 []ast.Spec
 // T 为 IdentsPattern, n 需要 []*ast.Ident
 // T 为 FieldsPattern, n 需要 []*ast.Field
 func TryGetMatchFun[T Pattern](m *Matcher, n any) MatchFun {
@@ -104,6 +107,8 @@ func TryGetMatchFun[T Pattern](m *Matcher, n any) MatchFun {
 		return m.TryGetStmtsMatchFun(n.([]ast.Stmt))
 	case ExprsPattern:
 		return m.TryGetExprsMatchFun(n.([]ast.Expr))
+	case SpecsPattern:
+		return m.TryGetSpecsMatchFun(n.([]ast.Spec))
 	case IdentsPattern:
 		return m.TryGetIdentsMatchFun(n.([]*ast.Ident))
 	case FieldsPattern:
@@ -113,7 +118,7 @@ func TryGetMatchFun[T Pattern](m *Matcher, n any) MatchFun {
 	}
 }
 
-func MkPatternVar[T Pattern](m *Matcher, name string) T {
+func MkVar[T Pattern](m *Matcher, name string) T {
 	var zero T
 	switch any(zero).(type) {
 	case NodePattern:
@@ -146,6 +151,8 @@ func MkPatternVar[T Pattern](m *Matcher, name string) T {
 		return any(m.MkStmtsPatternVar(name)).(T)
 	case ExprsPattern:
 		return any(m.MkExprsPatternVar(name)).(T)
+	case SpecsPattern:
+		return any(m.MkSpecsPatternVar(name)).(T)
 	case IdentsPattern:
 		return any(m.MkIdentsPatternVar(name)).(T)
 	case FieldsPattern:
@@ -165,7 +172,7 @@ type (
 )
 
 func BindWith[T Pattern](m *Matcher, name string, ptn T) T {
-	return And(m, ptn, MkPatternVar[T](m, name))
+	return And(m, ptn, MkVar[T](m, name))
 }
 
 func Combine1[T Pattern](m *Matcher, a T, un Unary[MatchFun]) T {
@@ -203,6 +210,26 @@ func Or[T Pattern](m *Matcher, a, b T) T {
 	})
 }
 
+func Len[T SlicePattern](m *Matcher, p Predicate[int]) T {
+	return MkPattern[T](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		var zero T
+		switch any(zero).(type) {
+		case StmtsPattern:
+			return p(len(n.(StmtsNode)))
+		case ExprsPattern:
+			return p(len(n.(ExprsNode)))
+		case SpecsPattern:
+			return p(len(n.(SpecsNode)))
+		case IdentsPattern:
+			return p(len(n.(IdentsNode)))
+		case FieldsPattern:
+			return p(len(n.(FieldsNode)))
+		default:
+			panic("unreachable")
+		}
+	})
+}
+
 // Wildcard 同一个 m 的 wildcard 可以缓存起来使用
 func Wildcard[T Pattern](m *Matcher) T {
 	return MkPattern[T](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool { return true })
@@ -229,34 +256,39 @@ func IdentRegex(m *Matcher, reg *regexp.Regexp) IdentPattern {
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓ Type ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
-func TypeCompare[T TypingPattern](m *Matcher, ty types.Type, cmp Comparator[types.Type]) T {
+func typeCompare[T TypingPattern](m *Matcher, ty types.Type, cmp Comparator[types.Type]) T {
 	return MkPattern[T](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
-		expr := n.(ast.Expr) // ast.Expr | *ast.Ident
-		if expr == nil {     // 注意 cast 之后再判空
+		// n 可能为 nil, 比如 const 没有类型, 所以需要 , _ 判断
+		expr, _ := n.(ast.Expr) // ast.Expr | *ast.Ident
+		if expr == nil {        // 注意 cast 之后再判空
 			return false
 		}
 		exprTy := m.TypeOf(expr)
 		assert(ty != nil, "type not found: "+m.ShowNode(expr))
 		// if ty == nil { return false }
-		return cmp(exprTy, ty)
+		b := cmp(exprTy, ty)
+		if !b {
+			// fmt.Println(m.ShowNode(expr))
+		}
+		return b
 	})
 }
 
-func ConvertibleTo[T TypingPattern](m *Matcher, ty types.Type) T {
-	return TypeCompare[T](m, ty, types.ConvertibleTo)
+func TypeConvertibleTo[T TypingPattern](m *Matcher, ty types.Type) T {
+	return typeCompare[T](m, ty, types.ConvertibleTo)
 }
-func AssignableTo[T TypingPattern](m *Matcher, ty types.Type) T {
-	return TypeCompare[T](m, ty, types.AssignableTo)
+func TypeAssignableTo[T TypingPattern](m *Matcher, ty types.Type) T {
+	return typeCompare[T](m, ty, types.AssignableTo)
 }
-func Identical[T TypingPattern](m *Matcher, ty types.Type) T {
-	return TypeCompare[T](m, ty, types.Identical)
+func TypeIdentical[T TypingPattern](m *Matcher, ty types.Type) T {
+	return typeCompare[T](m, ty, types.Identical)
 }
-func IdenticalIgnoreTags[T TypingPattern](m *Matcher, ty types.Type) T {
-	return TypeCompare[T](m, ty, types.IdenticalIgnoreTags)
+func TypeIdenticalIgnoreTags[T TypingPattern](m *Matcher, ty types.Type) T {
+	return typeCompare[T](m, ty, types.IdenticalIgnoreTags)
 }
-func Implements[T TypingPattern](m *Matcher, iface *types.Interface) T {
-	return TypeCompare[T](m, iface, func(v, t types.Type) bool {
-		return TypeImplements(v, iface)
+func TypeImplements[T TypingPattern](m *Matcher, iface *types.Interface) T {
+	return typeCompare[T](m, iface, func(v, t types.Type) bool {
+		return TypeX.Implements(v, iface)
 	})
 }
 
