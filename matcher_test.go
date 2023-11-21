@@ -130,10 +130,12 @@ func TestRun(t *testing.T) {
 			// baseName := strings.TrimSpace(string(ar.Comment))
 			for patternName, wantStdout := range testCase {
 				stdout := ""
-				WalkDir(dir, func(filename string, m *Matcher, file *ast.File) {
-					patternName = testName + "/" + patternName
+				patternName = testName + "/" + patternName
+
+				m := NewMatcher(dir, []string{PatternAll})
+				m.Walk(func(m *Matcher, file *ast.File) {
 					t.Log(patternName)
-					m.Match(patterns[patternName](m), file, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
+					m.MatchNode(patterns[patternName](m), file, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
 						n := c.Node()
 						parent := c.Parent()
 						bind := binds["var"]
@@ -144,7 +146,7 @@ func TestRun(t *testing.T) {
 							stdout += "node: " + cur + "\n"
 						}
 						if bind != nil {
-							pos := basePositionOf(m.FileSet, bind)
+							pos := basePositionOf(m.FSet, bind)
 							if pos != "" {
 								stdout += "pos : " + pos + "\n"
 							}
@@ -153,6 +155,7 @@ func TestRun(t *testing.T) {
 						stdout += "\n"
 					})
 				})
+
 				have := stdout
 				want := string(wantStdout.Data)
 				if strings.TrimSpace(want) != strings.TrimSpace(have) {

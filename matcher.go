@@ -12,29 +12,54 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Binds ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
-
 type (
+	PackageID  = string
 	PatternVar = string
 	Binds      map[PatternVar]ast.Node
 )
 
-func mkBinds() Binds {
-	return map[PatternVar]ast.Node{}
+// ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ MatchOption ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+type MatchFlags struct {
+	loadAll           bool
+	unparenExpr       bool
+	matchCallEllipsis bool
+	pkgFilter         func(pkg *packages.Package) bool
+	fileFilter        func(filename string) bool
+}
+
+type MatchOption func(*MatchFlags)
+
+// WithLoadAll 加载所有外部依赖包比较耗时, 如果需要引用外部类型进行判断需要加载
+func WithLoadAll() MatchOption     { return func(opts *MatchFlags) { opts.loadAll = true } }
+func WithUnparenExpr() MatchOption { return func(opts *MatchFlags) { opts.unparenExpr = true } }
+func WithMatchCallEllipsis() MatchOption {
+	return func(opts *MatchFlags) { opts.matchCallEllipsis = true }
+}
+func WithFilterPkg(f func(pkg *packages.Package) bool) MatchOption {
+	return func(opts *MatchFlags) { opts.pkgFilter = f }
+}
+func WithFilterFile(f func(filename string) bool) MatchOption {
+	return func(opts *MatchFlags) { opts.fileFilter = f }
 }
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Matcher ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
-type AllPackages = map[string]*packages.Package
-
 type Matcher struct {
-	FileSet *token.FileSet
-	All     AllPackages
-	Pkg     *packages.Package
+	*MatchFlags
 
+	// global
+	FSet *token.FileSet
+	Init []*packages.Package
+	All  map[PackageID]*packages.Package
+
+	// current package
+	Pkg *packages.Package
 	*types.Package
 	*types.Info
-	*MatchFlags
+
+	// current file
+	Filename string
 
 	// MatchFun Index, ref MkXXXPattern
 	// index: (BadExpr|BadStmt|BadDecl).FromPos
@@ -49,33 +74,49 @@ type Matcher struct {
 	funs []MatchFun
 }
 
-type MatchFlags struct {
-	UnparenExpr       bool
-	MatchCallEllipsis bool
-}
-type MatchOption func(*MatchFlags)
-
-func UnparenExpr() MatchOption       { return func(opts *MatchFlags) { opts.UnparenExpr = true } }
-func MatchCallEllipsis() MatchOption { return func(opts *MatchFlags) { opts.MatchCallEllipsis = true } }
-
 func NewMatcher(
-	fset *token.FileSet,
-	all AllPackages,
-	pkg *packages.Package,
+	dir string,
+	patterns []string,
 	opts ...MatchOption,
 ) *Matcher {
 	flags := &MatchFlags{}
 	for _, opt := range opts {
 		opt(flags)
 	}
+
+	fset, init, all := LoadDir(dir, patterns, flags.loadAll)
 	return &Matcher{
-		FileSet:    fset,
+		FSet:       fset,
+		Init:       init,
 		All:        all,
-		Pkg:        pkg,
-		Info:       pkg.TypesInfo,
-		Package:    pkg.Types,
 		MatchFlags: flags,
 	}
+}
+
+func (m *Matcher) setPkg(pkg *packages.Package) {
+	m.Pkg = pkg
+	m.Info = pkg.TypesInfo
+	m.Package = pkg.Types
+}
+
+func (m *Matcher) Walk(f func(m *Matcher, file *ast.File)) {
+	for _, pkg := range m.Init {
+		if m.pkgFilter == nil || m.pkgFilter(pkg) {
+			m.setPkg(pkg)
+			for i, filename := range pkg.CompiledGoFiles {
+				m.Filename = filename
+				if m.fileFilter == nil || m.fileFilter(filename) {
+					f(m, pkg.Syntax[i])
+				}
+			}
+		}
+	}
+}
+
+func (m *Matcher) Match(pattern ast.Node, f Callback) {
+	m.Walk(func(m *Matcher, file *ast.File) {
+		m.MatchNode(pattern, file, f)
+	})
 }
 
 // Callback
@@ -86,12 +127,12 @@ type Callback func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds)
 
 type stackBuilder func(node ast.Node) []ast.Node
 
-func (m *Matcher) Match(pattern, node ast.Node, f Callback) {
+func (m *Matcher) MatchNode(pattern, node ast.Node, f Callback) {
 	buildStack := m.mkStackBuilder(node)
 	postOrder(node, func(c *astutil.Cursor) bool {
 		n := c.Node()
 		stack := buildStack(n)
-		binds := mkBinds()
+		binds := map[PatternVar]ast.Node{}
 		if m.match(pattern, n, stack, binds) {
 			f(m, c, stack, binds)
 		}
@@ -499,7 +540,7 @@ func (m *Matcher) matchExpr(x, y ast.Expr, stack []ast.Node, binds Binds) bool {
 		return true
 	}
 
-	if m.UnparenExpr {
+	if m.unparenExpr {
 		x = astutil.Unparen(x)
 		y = astutil.Unparen(y)
 	}
@@ -615,7 +656,7 @@ func (m *Matcher) matchExpr(x, y ast.Expr, stack []ast.Node, binds Binds) bool {
 		if y == nil {
 			return false
 		}
-		if m.MatchCallEllipsis &&
+		if m.matchCallEllipsis &&
 			x.Ellipsis.IsValid() != y.Ellipsis.IsValid() {
 			return false
 		}
@@ -820,11 +861,11 @@ func (m *Matcher) matchSpecs(xs, ys []ast.Spec, stack []ast.Node, binds Binds) b
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ etc ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 func (m *Matcher) ShowPos(n ast.Node) string {
-	return ShowPos(m.FileSet, n).String()
+	return ShowPos(m.FSet, n).String()
 }
 
 func (m *Matcher) ShowNode(n ast.Node) string {
-	return ShowNode(m.FileSet, n)
+	return ShowNode(m.FSet, n)
 }
 
 func (m *Matcher) ShowNodeWithPos(n ast.Node) string {
@@ -832,11 +873,11 @@ func (m *Matcher) ShowNodeWithPos(n ast.Node) string {
 }
 
 func (m *Matcher) WriteFile(filename string, f *ast.File) {
-	WriteFile(m.FileSet, filename, f)
+	WriteFile(m.FSet, filename, f)
 }
 
 func (m *Matcher) FormatFile(f *ast.File) string {
-	return string(FormatFile(m.FileSet, f))
+	return string(FormatFile(m.FSet, f))
 }
 
 func (m *Matcher) MustLookupType(qualified string) types.Type {

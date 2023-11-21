@@ -2,6 +2,7 @@ package astmatcher
 
 import (
 	"bytes"
+	"fmt"
 	"go/ast"
 	"go/format"
 	"go/printer"
@@ -95,7 +96,7 @@ func ShowPos(fset *token.FileSet, n ast.Node) token.Position {
 	return fset.Position(n.Pos())
 }
 
-// ↓↓↓↓↓↓↓↓↓↓↓↓ IsNilNode ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+// ↓↓↓↓↓↓↓↓↓↓↓↓ Node ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 // IsNilNode 解决参数是接口类型判空的问题
 func IsNilNode(n ast.Node) bool {
@@ -111,28 +112,64 @@ func IsNilNode(n ast.Node) bool {
 	return false
 }
 
-// ↓↓↓↓↓↓↓↓↓↓↓↓ IO ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+// ↓↓↓↓↓↓↓↓↓↓↓↓ Loader ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
-func LoadDir(dir string) (*token.FileSet, []*packages.Package) {
+const (
+	PatternAll = "./..."
+	PatternStd = "std"
+
+	IncludeTests = true
+
+	// NeedImports & NeedDeps 为了加载所有依赖包
+	loadMode packages.LoadMode = packages.NeedTypesInfo |
+		packages.NeedName |
+		packages.NeedFiles |
+		packages.NeedExportFile |
+		packages.NeedCompiledGoFiles |
+		packages.NeedTypes |
+		packages.NeedSyntax |
+		packages.NeedTypesInfo |
+		packages.NeedModule
+)
+
+func LoadDir(dir string, patterns []string, loadAll bool) (
+	*token.FileSet,
+	[]*packages.Package,
+	map[string]*packages.Package,
+) {
+	mode := loadMode
+	if loadAll {
+		mode |= packages.NeedImports | packages.NeedDeps
+	}
+
 	dir, err := filepath.Abs(dir)
 	panicIfErr(err)
 
 	fset := token.NewFileSet()
-	pkgs, err := packages.Load(&packages.Config{
-		Fset: fset,
-		Mode: packages.NeedTypesInfo |
-			packages.NeedName |
-			packages.NeedTypes |
-			packages.NeedSyntax |
-			packages.NeedImports |
-			packages.NeedDeps |
-			packages.NeedCompiledGoFiles,
-		Tests: true, // 包括测试
+	init, err := packages.Load(&packages.Config{
+		Fset:  fset,
+		Mode:  loadMode,
+		Tests: IncludeTests,
 		Dir:   dir,
-	}, "./..." /*all*/) // e.g. pattern std
+	}, patterns...)
 	panicIfErr(err)
-	return fset, pkgs
+
+	if len(init) == 0 {
+		errLog("no packages found")
+	}
+
+	all := map[PackageID]*packages.Package{}
+	packages.Visit(init, nil, func(pkg *packages.Package) {
+		all[pkg.ID] = pkg
+		for _, err := range pkg.Errors {
+			errLog(err)
+		}
+	})
+
+	return fset, init, all
 }
+
+// ↓↓↓↓↓↓↓↓↓↓↓↓ Format ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 func WriteFile(fset *token.FileSet, filename string, f *ast.File) {
 	fh, err := os.Create(filename)
@@ -160,6 +197,14 @@ func preOrder(root ast.Node, f astutil.ApplyFunc) {
 
 func postOrder(root ast.Node, f astutil.ApplyFunc) {
 	astutil.Apply(root, nil, f)
+}
+
+func errLog(a ...any) {
+	_, _ = fmt.Fprintln(os.Stderr, a...)
+}
+
+func exitOf(msg string) {
+	os.Exit(1)
 }
 
 func panicIfErr(err error) {
