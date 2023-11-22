@@ -1,6 +1,6 @@
 ## [WIP] go-ast-matcher
 
-Match and rewrite Golang by ast-pattern.
+Match and rewrite ast by ast pattern.
 
 ```go
 func GrepGormTabler(dir string) {
