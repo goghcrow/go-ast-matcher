@@ -19,15 +19,12 @@ import (
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓ Type ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
-type typeX string
-
-var TypeX typeX
-
-func (typeX) Implements(v types.Type, iface *types.Interface) bool {
+func implements(v types.Type, iface *types.Interface) bool {
 	return types.Implements(v, iface) ||
 		types.Implements(types.NewPointer(v), iface)
 }
-func (typeX) TypeId(obj types.Object) string {
+
+func typeId(obj types.Object) string {
 	pkg := obj.Pkg()
 	name := obj.Name()
 	if pkg != nil && pkg.Path() != "" {
@@ -36,7 +33,7 @@ func (typeX) TypeId(obj types.Object) string {
 		return name
 	}
 }
-func (typeX) DerefUnder(ty types.Type) types.Type {
+func derefUnder(ty types.Type) types.Type {
 	for {
 		if ptr, ok := ty.(*types.Pointer); ok {
 			ty = ptr.Elem()
@@ -50,7 +47,7 @@ func (typeX) DerefUnder(ty types.Type) types.Type {
 // ↓↓↓↓↓↓↓↓↓↓↓↓ Show ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 func ShowNode(fset *token.FileSet, n ast.Node) string {
-	// 处理自定义的 Node 类型
+	// first Show Pseudo Node
 	switch n := n.(type) {
 	case MatchFun:
 		return "match-fun"
@@ -98,15 +95,17 @@ func ShowPos(fset *token.FileSet, n ast.Node) token.Position {
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓ Node ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
-// IsNilNode 解决参数是接口类型判空的问题
+// IsNilNode for typed-nil problem
 func IsNilNode(n ast.Node) bool {
-	// 如果 n 本身就是 ast.Node, e.g var n ast.Node
+	// if type of n is identity to ast.Node
+	// e.g. var n ast.Node
 	if n == nil {
 		return true
 	}
-	// 如果 n 是 ast.Node 的子类型
+	// if type of n is subtype of ast.Node
+	// e.g. var n *ast.Ident
 	if v := reflect.ValueOf(n); v.Kind() == reflect.Ptr && v.IsNil() {
-		// n = nil // 这样可以把 typed nil 转换成 untyped nil
+		// n = nil // conv typed nil to untyped nil
 		return true
 	}
 	return false
@@ -120,8 +119,9 @@ const (
 
 	IncludeTests = true
 
-	// NeedImports & NeedDeps 为了加载所有依赖包
-	loadMode packages.LoadMode = packages.NeedTypesInfo |
+	// LoadDepts load all dependencies
+	LoadDepts = packages.NeedImports | packages.NeedDeps
+	LoadMode  = packages.NeedTypesInfo |
 		packages.NeedName |
 		packages.NeedFiles |
 		packages.NeedExportFile |
@@ -137,9 +137,9 @@ func LoadDir(dir string, patterns []string, loadAll bool) (
 	[]*packages.Package,
 	map[string]*packages.Package,
 ) {
-	mode := loadMode
+	mode := LoadMode
 	if loadAll {
-		mode |= packages.NeedImports | packages.NeedDeps
+		mode |= LoadDepts
 	}
 
 	dir, err := filepath.Abs(dir)
@@ -148,7 +148,7 @@ func LoadDir(dir string, patterns []string, loadAll bool) (
 	fset := token.NewFileSet()
 	init, err := packages.Load(&packages.Config{
 		Fset:  fset,
-		Mode:  loadMode,
+		Mode:  mode,
 		Tests: IncludeTests,
 		Dir:   dir,
 	}, patterns...)

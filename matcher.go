@@ -30,7 +30,7 @@ type MatchFlags struct {
 
 type MatchOption func(*MatchFlags)
 
-// WithLoadAll 加载所有外部依赖包比较耗时, 如果需要引用外部类型进行判断需要加载
+// WithLoadAll is slowly, but you can match external types
 func WithLoadAll() MatchOption     { return func(opts *MatchFlags) { opts.loadAll = true } }
 func WithUnparenExpr() MatchOption { return func(opts *MatchFlags) { opts.unparenExpr = true } }
 func WithMatchCallEllipsis() MatchOption {
@@ -120,9 +120,9 @@ func (m *Matcher) Match(pattern ast.Node, f Callback) {
 }
 
 // Callback
-// 如果是 preorder, callback 可以返回 bool, 控制是否继续遍历子树
-// 但是如果是 preorder 可能会错过 修改过的子树满足 pattern 的情况
-// postorder 同样也有类型问题, 可能需要 working-list 之类方式处理
+// If it is preorder, the callback can return bool to control whether to continue traversing the subtree
+// But if it is preorder, it may miss the case where the modified subtree satisfies the pattern
+// Postorder also has type problems, and may need to be handled with a working-list
 type Callback func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds)
 
 type stackBuilder func(node ast.Node) []ast.Node
@@ -157,16 +157,16 @@ func (m *Matcher) mkStackBuilder(root ast.Node) stackBuilder {
 	}
 }
 
-// x pattern, y node
-// 整体 nil 判断的逻辑, 如果 pattern (x) 为 nil, 相当于 wildcard, 无条件返回 true
-// 当 y 为 nil, 首先要先进行 matchFunc 的判断, 可能 matchFunc 需要匹配 nil 场景
-// 最后, pattern 不为 nil, 但是 y 为 nil, 返回 false
+// x is pattern, y is node
+// If pattern x is nil, it is equivalent to wildcard, and true is returned
+// When y is nil, first call matchFunc, because nil case may need
+// Finally, pattern is not nil, but y is nil, return false
 func (m *Matcher) match(x, y ast.Node, stack []ast.Node, binds Binds) bool {
 	if IsNilNode(x) {
 		return true
 	}
 
-	if matchFun := m.TryGetNodeMatchFun(x); matchFun != nil {
+	if matchFun := m.tryGetNodeMatchFun(x); matchFun != nil {
 		return matchFun(m, y, stack, binds)
 	}
 
@@ -203,7 +203,7 @@ func (m *Matcher) match(x, y ast.Node, stack []ast.Node, binds Binds) bool {
 
 	case *ast.Field:
 		y := y.(*ast.Field)
-		if matchFun := m.TryGetFieldMatchFun(x); matchFun != nil {
+		if matchFun := m.tryGetFieldMatchFun(x); matchFun != nil {
 			return matchFun(m, y, stack, binds)
 		}
 		if y == nil {
@@ -215,10 +215,10 @@ func (m *Matcher) match(x, y ast.Node, stack []ast.Node, binds Binds) bool {
 
 	case *ast.FieldList:
 		y := y.(*ast.FieldList)
-		if matchFun := m.TryGetFieldListMatchFun(x); matchFun != nil {
+		if matchFun := m.tryGetFieldListMatchFun(x); matchFun != nil {
 			return matchFun(m, y, stack, binds)
 		}
-		if matchFun := m.TryGetFieldsMatchFun(x.List); matchFun != nil {
+		if matchFun := m.tryGetFieldsMatchFun(x.List); matchFun != nil {
 			if y == nil {
 				return matchFun(m, nil, stack, binds)
 			} else {
@@ -261,7 +261,7 @@ func (m *Matcher) matchSpec(x, y ast.Spec, stack []ast.Node, binds Binds) bool {
 		return true
 	}
 
-	if matchFun := m.TryGetSpecMatchFun(x); matchFun != nil {
+	if matchFun := m.tryGetSpecMatchFun(x); matchFun != nil {
 		return matchFun(m, y, stack, binds)
 	}
 
@@ -282,7 +282,7 @@ func (m *Matcher) matchSpec(x, y ast.Spec, stack []ast.Node, binds Binds) bool {
 		if !m.matchIdent(x.Name, y.Name, stack, binds) {
 			return false
 		}
-		// import path 一定是 string literal
+		// import path must be string literal
 		// xp, _ := strconv.Unquote(x.Path.Value)
 		// yp, _ := strconv.Unquote(y.Path.Value)
 		// return xp == yp
@@ -313,7 +313,7 @@ func (m *Matcher) matchDecl(x, y ast.Decl, stack []ast.Node, binds Binds) bool {
 		return true
 	}
 
-	if matchFun := m.TryGetDeclMatchFun(x); matchFun != nil {
+	if matchFun := m.tryGetDeclMatchFun(x); matchFun != nil {
 		return matchFun(m, y, stack, binds)
 	}
 
@@ -353,7 +353,7 @@ func (m *Matcher) matchStmt(x, y ast.Stmt, stack []ast.Node, binds Binds) bool {
 		return true
 	}
 
-	if matchFun := m.TryGetStmtMatchFun(x); matchFun != nil {
+	if matchFun := m.tryGetStmtMatchFun(x); matchFun != nil {
 		return matchFun(m, y, stack, binds)
 	}
 
@@ -370,7 +370,7 @@ func (m *Matcher) matchStmt(x, y ast.Stmt, stack []ast.Node, binds Binds) bool {
 		panic("unexpect BadStmt: " + m.ShowNodeWithPos(x))
 
 	case *ast.EmptyStmt:
-		// 其实不需要, reflect 已经判断
+		// no need, checked in reflect.TypeOf
 		// y := y.(*ast.EmptyStmt)
 		return true
 
@@ -452,7 +452,7 @@ func (m *Matcher) matchStmt(x, y ast.Stmt, stack []ast.Node, binds Binds) bool {
 
 	case *ast.BlockStmt:
 		y := y.(*ast.BlockStmt)
-		if matchFun := m.TryGetBlockStmtMatchFun(x); matchFun != nil {
+		if matchFun := m.tryGetBlockStmtMatchFun(x); matchFun != nil {
 			return matchFun(m, y, stack, binds)
 		}
 		if y == nil {
@@ -545,7 +545,7 @@ func (m *Matcher) matchExpr(x, y ast.Expr, stack []ast.Node, binds Binds) bool {
 		y = astutil.Unparen(y)
 	}
 
-	if matchFun := m.TryGetExprMatchFun(x); matchFun != nil {
+	if matchFun := m.tryGetExprMatchFun(x); matchFun != nil {
 		return matchFun(m, y, stack, binds)
 	}
 
@@ -563,7 +563,7 @@ func (m *Matcher) matchExpr(x, y ast.Expr, stack []ast.Node, binds Binds) bool {
 
 	case *ast.Ident:
 		y := y.(*ast.Ident)
-		if matchFun := m.TryGetIdentMatchFun(x); matchFun != nil {
+		if matchFun := m.tryGetIdentMatchFun(x); matchFun != nil {
 			return matchFun(m, y, stack, binds)
 		}
 		if y == nil {
@@ -650,7 +650,7 @@ func (m *Matcher) matchExpr(x, y ast.Expr, stack []ast.Node, binds Binds) bool {
 
 	case *ast.CallExpr:
 		y := y.(*ast.CallExpr)
-		if matchFun := m.TryGetCallExprMatchFun(x); matchFun != nil {
+		if matchFun := m.tryGetCallExprMatchFun(x); matchFun != nil {
 			return matchFun(m, y, stack, binds)
 		}
 		if y == nil {
@@ -714,7 +714,7 @@ func (m *Matcher) matchExpr(x, y ast.Expr, stack []ast.Node, binds Binds) bool {
 
 	case *ast.FuncType:
 		y := y.(*ast.FuncType)
-		if matchFun := m.TryGetFuncTypeMatchFun(x); matchFun != nil {
+		if matchFun := m.tryGetFuncTypeMatchFun(x); matchFun != nil {
 			return matchFun(m, y, stack, binds)
 		}
 		if y == nil {
@@ -753,7 +753,7 @@ func (m *Matcher) matchIdent(x, y *ast.Ident, stack []ast.Node, binds Binds) boo
 	if x == nil {
 		return true
 	}
-	if matchFun := m.TryGetIdentMatchFun(x); matchFun != nil {
+	if matchFun := m.tryGetIdentMatchFun(x); matchFun != nil {
 		return matchFun(m, y, stack, binds)
 	}
 	if y == nil {
@@ -766,21 +766,22 @@ func (m *Matcher) matchBasicLit(x, y *ast.BasicLit, stack []ast.Node, binds Bind
 	if x == nil {
 		return true
 	}
-	if matchFun := m.TryGetBasicLitMatchFun(x); matchFun != nil {
+	if matchFun := m.tryGetBasicLitMatchFun(x); matchFun != nil {
 		return matchFun(m, y, stack, binds)
 	}
 	if y == nil {
 		return false
 	}
-	// 注意: BasicLit 是原子 Pattern, 不支持展开匹配, 比如展开匹配 Kind
-	// 且字面量需要用 constant.Compare 判断, 不能只看 Kind
+	// Notice: BasicLit is atomic Pattern, does not support expanding match
+	// e.g. matching BasicLit.Kind
+	// And to judge equivalence of  literal by constant.Compare, not just Kind
 	xVal := constant.MakeFromLiteral(x.Value, x.Kind, 0)
 	yVal := constant.MakeFromLiteral(y.Value, y.Kind, 0)
 	return constant.Compare(xVal, token.EQL, yVal)
 }
 
 func (m *Matcher) matchToken(x, y token.Token, stack []ast.Node, binds Binds) bool {
-	if matchFun := m.TryGetTokenMatchFun(x); matchFun != nil {
+	if matchFun := m.tryGetTokenMatchFun(x); matchFun != nil {
 		return matchFun(m, TokenNode(y), stack, binds)
 	}
 	return x == y
@@ -790,7 +791,7 @@ func (m *Matcher) matchStmts(xs, ys []ast.Stmt, stack []ast.Node, binds Binds) b
 	if xs == nil {
 		return true
 	}
-	if matchFun := m.TryGetStmtsMatchFun(xs); matchFun != nil {
+	if matchFun := m.tryGetStmtsMatchFun(xs); matchFun != nil {
 		return matchFun(m, StmtsNode(ys), stack, binds)
 	}
 	if len(xs) != len(ys) {
@@ -808,7 +809,7 @@ func (m *Matcher) matchExprs(xs, ys []ast.Expr, stack []ast.Node, binds Binds) b
 	if xs == nil {
 		return true
 	}
-	if matchFun := m.TryGetExprsMatchFun(xs); matchFun != nil {
+	if matchFun := m.tryGetExprsMatchFun(xs); matchFun != nil {
 		return matchFun(m, ExprsNode(ys), stack, binds)
 	}
 	if len(xs) != len(ys) {
@@ -826,7 +827,7 @@ func (m *Matcher) matchIdents(xs, ys []*ast.Ident, stack []ast.Node, binds Binds
 	if xs == nil {
 		return true
 	}
-	if matchFun := m.TryGetIdentsMatchFun(xs); matchFun != nil {
+	if matchFun := m.tryGetIdentsMatchFun(xs); matchFun != nil {
 		return matchFun(m, IdentsNode(ys), stack, binds)
 	}
 	if len(xs) != len(ys) {
@@ -844,7 +845,7 @@ func (m *Matcher) matchSpecs(xs, ys []ast.Spec, stack []ast.Node, binds Binds) b
 	if xs == nil {
 		return true
 	}
-	if matchFun := m.TryGetSpecsMatchFun(xs); matchFun != nil {
+	if matchFun := m.tryGetSpecsMatchFun(xs); matchFun != nil {
 		return matchFun(m, SpecsNode(ys), stack, binds)
 	}
 	if len(xs) != len(ys) {
@@ -881,14 +882,22 @@ func (m *Matcher) FormatFile(f *ast.File) string {
 }
 
 func (m *Matcher) MustLookupType(qualified string) types.Type {
+	ptr := false
+	if qualified[0] == '*' {
+		ptr = true
+		qualified = qualified[1:]
+	}
 	obj := m.Lookup(qualified)
 	assert(obj != nil, "type not found: "+qualified)
+	if ptr {
+		return types.NewPointer(obj.Type())
+	}
 	return obj.Type()
 }
 
 // Lookup builtin | qualified ident
 // e.g. "error", "string", "encoding/json.Marshal"
-// 缓存下?
+// cached?
 func (m *Matcher) Lookup(qualifiedName string) types.Object {
 	idx := strings.LastIndex(qualifiedName, ".")
 	if idx == -1 {

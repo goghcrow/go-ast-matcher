@@ -31,14 +31,13 @@ func basePositionOf(fset *token.FileSet, n ast.Node) string {
 
 var patterns = map[string]func(m *Matcher) ast.Node{
 	"ident/wildcard": func(m *Matcher) ast.Node {
-		return BindWith(m,
+		return Bind(m,
 			"var",
 			Wildcard[IdentPattern](m),
 		)
 	},
 	"basiclit/import": func(m *Matcher) ast.Node {
 		return &ast.ImportSpec{
-			// Name: , // 只有 nil 默认是通配符,
 			Path: MkVar[BasicLitPattern](m, "var"),
 		}
 	},
@@ -61,11 +60,11 @@ var patterns = map[string]func(m *Matcher) ast.Node{
 		}
 	},
 	"ident/int": func(m *Matcher) ast.Node {
-		// 不能只用 Type 匹配
+		// Can not only use Type to match
 		// var id int
-		// id 的类型是 int, int 本身的类型也是 int
-		// 匹配 int 类型, 名字为 id 的标识符
-		return BindWith(m,
+		// The type of id is int, and the type of int itself is also int
+		// Match the identifier with typing int and naming id
+		return Bind(m,
 			"var",
 			And(m,
 				IdentEqual(m, "id"),
@@ -80,9 +79,12 @@ var patterns = map[string]func(m *Matcher) ast.Node{
 	},
 	"basiclit/tag": func(m *Matcher) ast.Node {
 		return &ast.Field{
-			Tag: BindWith(m,
+			Tag: Bind(m,
 				"var",
 				MkPattern[BasicLitPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+					if n == nil /*ast.Node(nil)*/ {
+						return false
+					}
 					tagLit, _ := n.(*ast.BasicLit)
 					if tagLit == nil {
 						return false
@@ -167,19 +169,19 @@ func TestRun(t *testing.T) {
 	}
 }
 
-// BindWith[NodePattern](m, "var", MkPattern[NodePattern](m))
-// BindWith[StmtPattern](m, "var", MkPattern[StmtPattern](m))
-// BindWith[ExprPattern](m, "var", MkPattern[ExprPattern](m))
-// BindWith[DeclPattern](m, "var", MkPattern[DeclPattern](m))
-// BindWith[IdentPattern](m, "var", MkPattern[IdentPattern](m))
-// BindWith[FieldPattern](m, "var", MkPattern[FieldPattern](m))
-// BindWith[FieldListPattern](m, "var", MkPattern[FieldListPattern](m))
-// BindWith[CallExprPattern](m, "var", MkPattern[CallExprPattern](m))
-// BindWith[FuncTypePattern](m, "var", MkPattern[FuncTypePattern](m))
-// BindWith[BlockStmtPattern](m, "var", MkPattern[BlockStmtPattern](m))
-// BindWith[TokenPattern](m, "var", MkPattern[TokenPattern](m))
-// BindWith[BasicLitPattern](m, "var", MkPattern[BasicLitPattern](m))
-// BindWith[StmtsPattern](m, "var", MkPattern[StmtsPattern](m))
-// BindWith[ExprsPattern](m, "var", MkPattern[ExprsPattern](m))
-// BindWith[IdentsPattern](m, "var", MkPattern[IdentsPattern](m))
-// BindWith[FieldsPattern](m, "var", MkPattern[FieldsPattern](m))
+// Bind[NodePattern](m, "var", MkPattern[NodePattern](m))
+// Bind[StmtPattern](m, "var", MkPattern[StmtPattern](m))
+// Bind[ExprPattern](m, "var", MkPattern[ExprPattern](m))
+// Bind[DeclPattern](m, "var", MkPattern[DeclPattern](m))
+// Bind[IdentPattern](m, "var", MkPattern[IdentPattern](m))
+// Bind[FieldPattern](m, "var", MkPattern[FieldPattern](m))
+// Bind[FieldListPattern](m, "var", MkPattern[FieldListPattern](m))
+// Bind[CallExprPattern](m, "var", MkPattern[CallExprPattern](m))
+// Bind[FuncTypePattern](m, "var", MkPattern[FuncTypePattern](m))
+// Bind[BlockStmtPattern](m, "var", MkPattern[BlockStmtPattern](m))
+// Bind[TokenPattern](m, "var", MkPattern[TokenPattern](m))
+// Bind[BasicLitPattern](m, "var", MkPattern[BasicLitPattern](m))
+// Bind[StmtsPattern](m, "var", MkPattern[StmtsPattern](m))
+// Bind[ExprsPattern](m, "var", MkPattern[ExprsPattern](m))
+// Bind[IdentsPattern](m, "var", MkPattern[IdentsPattern](m))
+// Bind[FieldsPattern](m, "var", MkPattern[FieldsPattern](m))

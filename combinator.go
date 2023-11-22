@@ -4,163 +4,9 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"reflect"
 	"regexp"
 )
-
-// ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Factory ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
-
-func MkPattern[T Pattern](m *Matcher, f MatchFun) T {
-	var zero T
-	switch any(zero).(type) {
-	case NodePattern:
-		return any(m.MkNodePattern(f)).(T)
-	case StmtPattern:
-		return any(m.MkStmtPattern(f)).(T)
-	case ExprPattern:
-		return any(m.MkExprPattern(f)).(T)
-	case DeclPattern:
-		return any(m.MkDeclPattern(f)).(T)
-	case IdentPattern:
-		return any(m.MkIdentPattern(f)).(T)
-	case FieldPattern:
-		return any(m.MkFieldPattern(f)).(T)
-	case FieldListPattern:
-		return any(m.MkFieldListPattern(f)).(T)
-	case CallExprPattern:
-		return any(m.MkCallExprPattern(f)).(T)
-	case FuncTypePattern:
-		return any(m.MkFuncTypePattern(f)).(T)
-	case BlockStmtPattern:
-		return any(m.MkBlockStmtPattern(f)).(T)
-	case TokenPattern:
-		return any(m.MkTokenPattern(f)).(T)
-	case BasicLitPattern:
-		return any(m.MkBasicLitPattern(f)).(T)
-	case StmtsPattern:
-		return any(m.MkStmtsPattern(f)).(T)
-	case ExprsPattern:
-		return any(m.MkExprsPattern(f)).(T)
-	case SpecsPattern:
-		return any(m.MkSpecsPattern(f)).(T)
-	case IdentsPattern:
-		return any(m.MkIdentsPattern(f)).(T)
-	case FieldsPattern:
-		return any(m.MkFieldsPattern(f)).(T)
-	default:
-		panic("unreachable")
-	}
-}
-
-func IsPattern[T Pattern](m *Matcher, n any) bool {
-	return TryGetMatchFun[T](m, n) != nil
-}
-
-// TryGetMatchFun
-// T 为 NodePattern, n 需要 ast.Node
-// T 为 StmtPattern, n 需要 ast.Stmt
-// T 为 ExprPattern, n 需要 ast.Expr
-// T 为 DeclPattern, n 需要 ast.Decl
-// T 为 SpecPattern, n 需要 ast.Spec
-// T 为 IdentPattern, n 需要 *ast.Ident
-// T 为 FieldPattern, n 需要 *ast.Field
-// T 为 FieldListPattern, n 需要 *ast.FieldList
-// T 为 CallExprPattern, n 需要 *ast.CallExpr
-// T 为 FuncTypePattern, n 需要 *ast.FuncType
-// T 为 BlockStmtPattern, n 需要 *ast.BlockStmt
-// T 为 TokenPattern, n 需要 token.Token
-// T 为 BasicLitPattern, n 需要 *ast.BasicLit
-// T 为 StmtsPattern, n 需要 []ast.Stmt
-// T 为 ExprsPattern, n 需要 []ast.Expr
-// T 为 SpecsPattern, n 需要 []ast.Spec
-// T 为 IdentsPattern, n 需要 []*ast.Ident
-// T 为 FieldsPattern, n 需要 []*ast.Field
-func TryGetMatchFun[T Pattern](m *Matcher, n any) MatchFun {
-	var zero T
-	switch any(zero).(type) {
-	case NodePattern:
-		return m.TryGetNodeMatchFun(n.(ast.Node))
-	case StmtPattern:
-		return m.TryGetStmtMatchFun(n.(ast.Stmt))
-	case ExprPattern:
-		return m.TryGetExprMatchFun(n.(ast.Expr))
-	case DeclPattern:
-		return m.TryGetDeclMatchFun(n.(ast.Decl))
-	case SpecPattern:
-		return m.TryGetSpecMatchFun(n.(ast.Spec))
-	case IdentPattern:
-		return m.TryGetIdentMatchFun(n.(*ast.Ident))
-	case FieldPattern:
-		return m.TryGetFieldMatchFun(n.(*ast.Field))
-	case FieldListPattern:
-		return m.TryGetFieldListMatchFun(n.(*ast.FieldList))
-	case CallExprPattern:
-		return m.TryGetCallExprMatchFun(n.(*ast.CallExpr))
-	case FuncTypePattern:
-		return m.TryGetFuncTypeMatchFun(n.(*ast.FuncType))
-	case BlockStmtPattern:
-		return m.TryGetBlockStmtMatchFun(n.(*ast.BlockStmt))
-	case TokenPattern:
-		return m.TryGetTokenMatchFun(n.(token.Token))
-	case BasicLitPattern:
-		return m.TryGetBasicLitMatchFun(n.(*ast.BasicLit))
-	case StmtsPattern:
-		return m.TryGetStmtsMatchFun(n.([]ast.Stmt))
-	case ExprsPattern:
-		return m.TryGetExprsMatchFun(n.([]ast.Expr))
-	case SpecsPattern:
-		return m.TryGetSpecsMatchFun(n.([]ast.Spec))
-	case IdentsPattern:
-		return m.TryGetIdentsMatchFun(n.([]*ast.Ident))
-	case FieldsPattern:
-		return m.TryGetFieldsMatchFun(n.([]*ast.Field))
-	default:
-		panic("unreachable")
-	}
-}
-
-func MkVar[T Pattern](m *Matcher, name string) T {
-	var zero T
-	switch any(zero).(type) {
-	case NodePattern:
-		return any(m.MkNodePatternVar(name)).(T)
-	case StmtPattern:
-		return any(m.MkStmtPatternVar(name)).(T)
-	case ExprPattern:
-		return any(m.MkExprPatternVar(name)).(T)
-	case DeclPattern:
-		return any(m.MkDeclPatternVar(name)).(T)
-	case SpecPattern:
-		return any(m.MkSpecPatternVar(name)).(T)
-	case IdentPattern:
-		return any(m.MkIdentPatternVar(name)).(T)
-	case FieldPattern:
-		return any(m.MkFieldPatternVar(name)).(T)
-	case FieldListPattern:
-		return any(m.MkFieldListPatternVar(name)).(T)
-	case CallExprPattern:
-		return any(m.MkCallExprPatternVar(name)).(T)
-	case FuncTypePattern:
-		return any(m.MkFuncTypePatternVar(name)).(T)
-	case BlockStmtPattern:
-		return any(m.MkBlockStmtPatternVar(name)).(T)
-	case TokenPattern:
-		return any(m.MkTokenPatternVar(name)).(T)
-	case BasicLitPattern:
-		return any(m.MkBasicLitPatternVar(name)).(T)
-	case StmtsPattern:
-		return any(m.MkStmtsPatternVar(name)).(T)
-	case ExprsPattern:
-		return any(m.MkExprsPatternVar(name)).(T)
-	case SpecsPattern:
-		return any(m.MkSpecsPatternVar(name)).(T)
-	case IdentsPattern:
-		return any(m.MkIdentsPatternVar(name)).(T)
-	case FieldsPattern:
-		return any(m.MkFieldsPatternVar(name)).(T)
-	default:
-		panic("unreachable")
-	}
-}
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Combinators ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
@@ -171,7 +17,12 @@ type (
 	Binary[T any]                    func(T, T) T
 )
 
-func BindWith[T Pattern](m *Matcher, name string, ptn T) T {
+// Wildcard of the same m can be cached
+func Wildcard[T Pattern](m *Matcher) T {
+	return MkPattern[T](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool { return true })
+}
+
+func Bind[T Pattern](m *Matcher, name string, ptn T) T {
 	return And(m, ptn, MkVar[T](m, name))
 }
 
@@ -210,41 +61,45 @@ func Or[T Pattern](m *Matcher, a, b T) T {
 	})
 }
 
-func Len[T SlicePattern](m *Matcher, p Predicate[int]) T {
-	return MkPattern[T](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
-		var zero T
-		switch any(zero).(type) {
-		case StmtsPattern:
-			return p(len(n.(StmtsNode)))
-		case ExprsPattern:
-			return p(len(n.(ExprsNode)))
-		case SpecsPattern:
-			return p(len(n.(SpecsNode)))
-		case IdentsPattern:
-			return p(len(n.(IdentsNode)))
-		case FieldsPattern:
-			return p(len(n.(FieldsNode)))
-		default:
-			panic("unreachable")
+// ↓↓↓↓↓↓↓↓↓↓↓ Slice ↓↓↓↓↓↓↓↓↓↓↓↓
+
+func Any[E ElemPattern, S SlicePattern](m *Matcher, p E) S {
+	return MkPattern[S](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		if n == nil /*ast.Node(nil)*/ {
+			return false
 		}
+		xs := reflect.ValueOf(n)
+		for i := 0; i < xs.Len(); i++ {
+			node := xs.Index(i).Interface().(ast.Node)
+			if TryGetMatchFun[E](m, p)(m, node, stack, binds) {
+				return true
+			}
+		}
+		return false
 	})
 }
 
-// Wildcard 同一个 m 的 wildcard 可以缓存起来使用
-func Wildcard[T Pattern](m *Matcher) T {
-	return MkPattern[T](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool { return true })
+func Len[T SlicePattern](m *Matcher, p Predicate[int]) T {
+	return MkPattern[T](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		if n == nil /*ast.Node(nil)*/ {
+			return false
+		}
+		return p(reflect.ValueOf(n).Len())
+	})
 }
 
 // ↓↓↓↓↓↓↓↓↓↓↓ Ident ↓↓↓↓↓↓↓↓↓↓↓↓
 
 func IdentPredicate(m *Matcher, p Predicate[string]) IdentPattern {
-	return m.MkIdentPattern(func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
-		// 这里不能用 id,ok 判断, typed nil!
-		id, _ := n.(*ast.Ident)
-		if id == nil {
+	return m.mkIdentPattern(func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		if n == nil /*ast.Node(nil)*/ {
 			return false
 		}
-		return p(id.Name)
+		ident := n.(*ast.Ident)
+		if ident == nil {
+			return false
+		}
+		return p(ident.Name)
 	})
 }
 func IdentEqual(m *Matcher, name string) IdentPattern {
@@ -258,19 +113,19 @@ func IdentRegex(m *Matcher, reg *regexp.Regexp) IdentPattern {
 
 func typeCompare[T TypingPattern](m *Matcher, ty types.Type, cmp Comparator[types.Type]) T {
 	return MkPattern[T](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
-		// n 可能为 nil, 比如 const 没有类型, 所以需要 , _ 判断
-		expr, _ := n.(ast.Expr) // ast.Expr | *ast.Ident
-		if expr == nil {        // 注意 cast 之后再判空
+		if n == nil /*ast.Node(nil)*/ {
+			return false
+		}
+		// typeof(n) = ast.Expr | *ast.Ident
+		// n maybe nil, e.g. const x = 1
+		expr := n.(ast.Expr)
+		if expr == nil {
 			return false
 		}
 		exprTy := m.TypeOf(expr)
 		assert(ty != nil, "type not found: "+m.ShowNode(expr))
 		// if ty == nil { return false }
-		b := cmp(exprTy, ty)
-		if !b {
-			// fmt.Println(m.ShowNode(expr))
-		}
-		return b
+		return cmp(exprTy, ty)
 	})
 }
 
@@ -288,14 +143,28 @@ func TypeIdenticalIgnoreTags[T TypingPattern](m *Matcher, ty types.Type) T {
 }
 func TypeImplements[T TypingPattern](m *Matcher, iface *types.Interface) T {
 	return typeCompare[T](m, iface, func(v, t types.Type) bool {
-		return TypeX.Implements(v, iface)
+		return implements(v, iface)
 	})
 }
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓ Method ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
+// IsFunction For ast.FuncDecl Recv
+func IsFunction(m *Matcher) FieldListPattern {
+	return MkPattern[FieldListPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		return IsNilNode(n)
+	})
+}
+
+func IsMethod(m *Matcher) FieldListPattern {
+	return Not[FieldListPattern](m, IsFunction(m))
+}
+
 func MethodRecv(m *Matcher, f func(ident *ast.Ident, ty ast.Expr) bool) FieldListPattern {
 	return MkPattern[FieldListPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		if n == nil /*ast.Node(nil)*/ {
+			return false
+		}
 		lst := n.(*ast.FieldList)
 		if lst == nil {
 			return false
@@ -315,7 +184,10 @@ func MethodRecv(m *Matcher, f func(ident *ast.Ident, ty ast.Expr) bool) FieldLis
 
 func BasicLitKind(m *Matcher, kind token.Token) ExprPattern {
 	return MkPattern[ExprPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
-		lit, _ := n.(*ast.BasicLit)
+		if n == nil /*ast.Node(nil)*/ {
+			return false
+		}
+		lit := n.(*ast.BasicLit)
 		if lit == nil {
 			return false
 		}
