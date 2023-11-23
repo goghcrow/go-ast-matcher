@@ -882,16 +882,8 @@ func (m *Matcher) FormatFile(f *ast.File) string {
 }
 
 func (m *Matcher) MustLookupType(qualified string) types.Type {
-	ptr := false
-	if qualified[0] == '*' {
-		ptr = true
-		qualified = qualified[1:]
-	}
 	obj := m.Lookup(qualified)
 	assert(obj != nil, "type not found: "+qualified)
-	if ptr {
-		return types.NewPointer(obj.Type())
-	}
 	return obj.Type()
 }
 

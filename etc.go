@@ -19,11 +19,6 @@ import (
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓ Type ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
-func implements(v types.Type, iface *types.Interface) bool {
-	return types.Implements(v, iface) ||
-		types.Implements(types.NewPointer(v), iface)
-}
-
 func typeId(obj types.Object) string {
 	pkg := obj.Pkg()
 	name := obj.Name()
@@ -109,6 +104,11 @@ func IsNilNode(n ast.Node) bool {
 		return true
 	}
 	return false
+}
+
+func IsNode[T ast.Node](n ast.Node) bool {
+	_, ok := n.(T)
+	return ok
 }
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓ Loader ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓

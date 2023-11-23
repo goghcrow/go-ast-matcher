@@ -111,39 +111,47 @@ func IdentRegex(m *Matcher, reg *regexp.Regexp) IdentPattern {
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓ Type ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
-func typeCompare[T TypingPattern](m *Matcher, ty types.Type, cmp Comparator[types.Type]) T {
+func TypeOf[T TypingPattern](m *Matcher, pred Predicate[types.Type]) T {
 	return MkPattern[T](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		// typeof(n) = ast.Expr | *ast.Ident
+		// n maybe nil, e.g. const x = 1
 		if n == nil /*ast.Node(nil)*/ {
 			return false
 		}
-		// typeof(n) = ast.Expr | *ast.Ident
-		// n maybe nil, e.g. const x = 1
 		expr := n.(ast.Expr)
-		if expr == nil {
+		if expr == nil { // ast.Expr(nil)
 			return false
 		}
 		exprTy := m.TypeOf(expr)
-		assert(ty != nil, "type not found: "+m.ShowNode(expr))
+		// assert(ty != nil, "type not found: "+m.ShowNode(expr))
 		// if ty == nil { return false }
-		return cmp(exprTy, ty)
+		return pred(exprTy)
 	})
 }
 
 func TypeConvertibleTo[T TypingPattern](m *Matcher, ty types.Type) T {
-	return typeCompare[T](m, ty, types.ConvertibleTo)
+	return TypeOf[T](m, func(t types.Type) bool {
+		return types.ConvertibleTo(t, ty)
+	})
 }
 func TypeAssignableTo[T TypingPattern](m *Matcher, ty types.Type) T {
-	return typeCompare[T](m, ty, types.AssignableTo)
+	return TypeOf[T](m, func(t types.Type) bool {
+		return types.AssignableTo(t, ty)
+	})
 }
 func TypeIdentical[T TypingPattern](m *Matcher, ty types.Type) T {
-	return typeCompare[T](m, ty, types.Identical)
+	return TypeOf[T](m, func(t types.Type) bool {
+		return types.Identical(t, ty)
+	})
 }
 func TypeIdenticalIgnoreTags[T TypingPattern](m *Matcher, ty types.Type) T {
-	return typeCompare[T](m, ty, types.IdenticalIgnoreTags)
+	return TypeOf[T](m, func(t types.Type) bool {
+		return types.IdenticalIgnoreTags(t, ty)
+	})
 }
 func TypeImplements[T TypingPattern](m *Matcher, iface *types.Interface) T {
-	return typeCompare[T](m, iface, func(v, t types.Type) bool {
-		return implements(v, iface)
+	return TypeOf[T](m, func(t types.Type) bool {
+		return types.Implements(t, iface)
 	})
 }
 
@@ -160,7 +168,27 @@ func IsMethod(m *Matcher) FieldListPattern {
 	return Not[FieldListPattern](m, IsFunction(m))
 }
 
-func MethodRecv(m *Matcher, f func(ident *ast.Ident, ty ast.Expr) bool) FieldListPattern {
+func SignatureOf(m *Matcher, p Predicate[*types.Signature]) IdentPattern {
+	return TypeOf[IdentPattern](m, func(t types.Type) bool {
+		if sig, ok := t.(*types.Signature); ok {
+			return p(sig)
+		}
+		return false
+	})
+}
+
+// RecvTypeOf for ast.FuncDecl { Name }
+func RecvTypeOf(m *Matcher, p Predicate[types.Type]) IdentPattern {
+	return SignatureOf(m, func(sig *types.Signature) bool {
+		if sig.Recv() == nil {
+			return false
+		}
+		return p(sig.Recv().Type())
+	})
+}
+
+// RecvOf for ast.FuncDecl { Recv }
+func RecvOf(m *Matcher, f func(recv *ast.Field) bool) FieldListPattern {
 	return MkPattern[FieldListPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
 		if n == nil /*ast.Node(nil)*/ {
 			return false
@@ -172,11 +200,7 @@ func MethodRecv(m *Matcher, f func(ident *ast.Ident, ty ast.Expr) bool) FieldLis
 		if lst.NumFields() != 1 {
 			return false
 		}
-		field := lst.List[0]
-		if len(field.Names) == 0 {
-			return f(nil, field.Type)
-		}
-		return f(field.Names[0], field.Type)
+		return f(lst.List[0])
 	})
 }
 
@@ -184,10 +208,9 @@ func MethodRecv(m *Matcher, f func(ident *ast.Ident, ty ast.Expr) bool) FieldLis
 
 func BasicLitKind(m *Matcher, kind token.Token) ExprPattern {
 	return MkPattern[ExprPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
-		if n == nil /*ast.Node(nil)*/ {
-			return false
-		}
-		lit := n.(*ast.BasicLit)
+		// Notice: ExprPattern returns, so param n of callback is ast.Expr
+		// n is BasicLit expr and not nil
+		lit, _ := n.(*ast.BasicLit)
 		if lit == nil {
 			return false
 		}
