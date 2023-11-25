@@ -6,7 +6,6 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -30,35 +29,6 @@ func basePositionOf(fset *token.FileSet, n ast.Node) string {
 }
 
 var patterns = map[string]func(m *Matcher) ast.Node{
-	"ident/wildcard": func(m *Matcher) ast.Node {
-		return Bind(m,
-			"var",
-			Wildcard[IdentPattern](m),
-		)
-	},
-	"basiclit/import": func(m *Matcher) ast.Node {
-		return &ast.ImportSpec{
-			Path: MkVar[BasicLitPattern](m, "var"),
-		}
-	},
-	"ident/gen_decl_var": func(m *Matcher) ast.Node {
-		return &ast.GenDecl{
-			Tok:   token.VAR, // IMPORT, CONST, TYPE, or VAR
-			Specs: MkVar[SpecsPattern](m, "var"),
-		}
-	},
-	"ident/gen_decl_const": func(m *Matcher) ast.Node {
-		return &ast.GenDecl{
-			Tok:   token.CONST, // IMPORT, CONST, TYPE, or VAR
-			Specs: MkVar[SpecsPattern](m, "var"),
-		}
-	},
-	"ident/val_spec": func(m *Matcher) ast.Node {
-		return &ast.ValueSpec{
-			Names: MkVar[IdentsPattern](m, "var"),
-			Type:  TypeIdentical[ExprPattern](m, m.MustLookupType("int")),
-		}
-	},
 	"ident/int": func(m *Matcher) ast.Node {
 		// Can not only use Type to match
 		// var id int
@@ -67,36 +37,21 @@ var patterns = map[string]func(m *Matcher) ast.Node{
 		return Bind(m,
 			"var",
 			And(m,
-				IdentEqual(m, "id"),
+				IdentNameEqual(m, "id"),
 				TypeIdentical[IdentPattern](m, m.MustLookupType("int")),
 			),
 		)
 	},
-	"ident/func_name": func(m *Matcher) ast.Node {
-		return &ast.FuncDecl{
-			Name: MkVar[IdentPattern](m, "var"),
-		}
-	},
-	"basiclit/tag": func(m *Matcher) ast.Node {
-		return &ast.Field{
-			Tag: Bind(m,
-				"var",
-				MkPattern[BasicLitPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
-					if n == nil /*ast.Node(nil)*/ {
-						return false
-					}
-					tagLit, _ := n.(*ast.BasicLit)
-					if tagLit == nil {
-						return false
-					}
-					assert(tagLit.Kind == token.STRING, "")
-					tag, _ := strconv.Unquote(tagLit.Value)
-					return strings.Contains(tag, "json")
-				}),
-			),
-		}
-	},
+	"ident/wildcard":              PatternOfWildcardIdent,
+	"ident/gen_decl_var":          PatternOfVarDecl,
+	"ident/gen_decl_const":        PatternOfConstDecl,
+	"ident/val_spec":              PatternOfValSpec,
+	"ident/func_name":             PatternOfAllFuncOrMethodDeclName,
 	"append_with_no_value/append": PatternOfAppendWithNoValue,
+	"call/println":                PatternOfCallFunOrMethodWithSpecName("println"),
+	"atomic/adder":                PatternOfCallAtomicAdder,
+	"basiclit/import":             PatternOfAllImportSpec,
+	"basiclit/tag":                PatternOfStructFieldWithJsonTag,
 }
 
 func TestRun(t *testing.T) {

@@ -5,19 +5,133 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"reflect"
+	"regexp"
 	"strconv"
 
 	"github.com/goghcrow/go-ansi"
 	"golang.org/x/tools/go/ast/astutil"
 )
 
+func PatternOfWildcardIdent(m *Matcher) ast.Node {
+	// bind matched wildcard ident to "var"
+	return Bind(m,
+		"var",
+		Wildcard[IdentPattern](m),
+	)
+}
+
+func PatternOfVarDecl(m *Matcher) ast.Node {
+	return &ast.GenDecl{
+		Tok: token.VAR, // IMPORT, CONST, TYPE, or VAR
+		// pattern variable, match any and bind to "var"
+		Specs: MkVar[SpecsPattern](m, "var"),
+	}
+}
+
+func PatternOfConstDecl(m *Matcher) ast.Node {
+	return &ast.GenDecl{
+		Tok: token.CONST, // IMPORT, CONST, TYPE, or VAR
+		// pattern variable, match any and bind to "var"
+		Specs: MkVar[SpecsPattern](m, "var"),
+	}
+}
+
+func PatternOfValSpec(m *Matcher) ast.Node {
+	return &ast.ValueSpec{
+		// pattern variable, match any and bind to "var"
+		Names: MkVar[IdentsPattern](m, "var"),
+		Type:  TypeIdentical[ExprPattern](m, m.MustLookupType("int")),
+	}
+}
+
+func PatternOfAllImportSpec(m *Matcher) ast.Node {
+	return &ast.ImportSpec{
+		// pattern variable, match any and bind to "var"
+		Path: MkVar[BasicLitPattern](m, "var"),
+	}
+}
+
+func PatternOfAllFuncOrMethodDeclName(m *Matcher) ast.Node {
+	return &ast.FuncDecl{
+		Name: MkVar[IdentPattern](m, "var"),
+	}
+}
+
+func PatternOfFuncOrMethodDeclWithSpecName(name string) func(m *Matcher) ast.Node {
+	return func(m *Matcher) ast.Node {
+		return &ast.FuncDecl{
+			Name: IdentNameEqual(m, name),
+		}
+	}
+}
+
+func PatternOfStructFieldWithJsonTag(m *Matcher) ast.Node {
+	return &ast.Field{
+		Tag: Bind(m,
+			"var",
+			TagOf(m, func(tag *reflect.StructTag) bool {
+				if tag == nil {
+					return false
+				}
+				_, ok := tag.Lookup("json")
+				return ok
+			}),
+		),
+	}
+}
+
+func PatternOfDefine(m *Matcher) ast.Node {
+	return &ast.AssignStmt{
+		Tok: token.DEFINE,
+	}
+}
+
+func PatternOfAssign(m *Matcher) ast.Node {
+	return &ast.AssignStmt{
+		Tok: MkPattern[TokenPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+			tok := n.(TokenNode)
+			// token.XXX_ASSIGN
+			return token.Token(tok) != token.DEFINE
+		}),
+	}
+}
+
 func PatternOfAppendWithNoValue(m *Matcher) ast.Node {
 	return &ast.CallExpr{
 		Fun: And(m,
-			IdentEqual(m, "append"),
+			IdentNameEqual(m, "append"),
 			IsBuiltin(m),
 		),
 		Args: SliceLenEQ[ExprsPattern](m, 1),
+	}
+}
+
+func PatternOfCallFunOrMethodWithSpecName(name string) func(m *Matcher) ast.Node {
+	return func(m *Matcher) ast.Node {
+		isSpecNameFun := IdentOf(m, func(id *ast.Ident) bool {
+			isFun := !m.Types[id].IsType() // not type cast
+			return isFun && id.Name == name
+		})
+		return &ast.CallExpr{
+			Fun: Or(m,
+				PatternOf[ExprPattern](m, isSpecNameFun),                         // cast id pattern to expr pattern
+				PatternOf[ExprPattern](m, &ast.SelectorExpr{Sel: isSpecNameFun}), // cast to expr pattern
+			),
+		}
+	}
+}
+
+func PatternOfCallAtomicAdder(m *Matcher) ast.Node {
+	adders := regexp.MustCompile("(AddInt32|AddInt64|AddUint32|AddUint64|AddUintptr)")
+	return &ast.CallExpr{
+		Fun: &ast.SelectorExpr{
+			X: IdentOf(m, func(id *ast.Ident) bool {
+				pkg, ok := m.Uses[id].(*types.PkgName)
+				return ok && pkg.Imported().Path() == "sync/atomic"
+			}),
+			Sel: IdentNameRegex(m, adders),
+		},
 	}
 }
 
@@ -109,8 +223,8 @@ func GrepDBProxy(dir string) {
 		Fun: &ast.SelectorExpr{
 			// X: Wildcard[ExprPattern](m),
 			Sel: Or[IdentPattern](m,
-				IdentEqual(m, "GetDBProxy"),
-				IdentEqual(m, "GetDB"),
+				IdentNameEqual(m, "GetDBProxy"),
+				IdentNameEqual(m, "GetDB"),
 			),
 		},
 		Args: MkVar[ExprsPattern](m, "args"),
@@ -176,11 +290,11 @@ func GrepGormTablerTableName(dir string) {
 		// 		types.Implements(types.NewPointer(ty), gormTabler)
 		// }),
 		// method name must be TableName
-		// Name: IdentEqual(m, "TableName"),
+		// Name: IdentNameEqual(m, "TableName"),
 
 		Name: And[IdentPattern](m,
 			// IsMethod(m),
-			IdentEqual(m, "TableName"),
+			IdentNameEqual(m, "TableName"),
 			RecvTypeOf(m, func(ty types.Type) bool {
 				return types.Implements(ty, gormTabler) ||
 					types.Implements(types.NewPointer(ty), gormTabler)
@@ -195,7 +309,7 @@ func GrepGormTablerTableName(dir string) {
 			List: []ast.Stmt{
 				&ast.ReturnStmt{
 					Results: []ast.Expr{
-						Bind[ExprPattern](m, "tableName", BasicLitKind(m, token.STRING)),
+						Bind[ExprPattern](m, "tableName", BasicLitKindOf(m, token.STRING)),
 
 						// Or
 						// Bind[BasicLitPattern](m, "tableName", MkPattern[BasicLitPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
@@ -250,7 +364,7 @@ func GrepGormChainAPI(dir string, filter func(*Matcher, *ast.FuncDecl) bool, opt
 	calls := map[ast.Node]*ast.FuncDecl{}
 	m.Match(pattern, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
 		assert(stack[0].(*ast.CallExpr) == c.Node().(*ast.CallExpr), "impossible")
-		collectChainCalls(m, calls, stack)
+		collectChainCalls(calls, stack)
 	})
 
 	groupedChainCalls := groupChainCalls(calls)
@@ -270,13 +384,13 @@ func GrepGormChainAPI(dir string, filter func(*Matcher, *ast.FuncDecl) bool, opt
 	}
 }
 
-func collectChainCalls(m *Matcher, calls map[ast.Node]*ast.FuncDecl, stack []ast.Node) {
+func collectChainCalls(calls map[ast.Node]*ast.FuncDecl, stack []ast.Node) []ast.Node {
 	// skip self
 	// call{fun=select{x=call{fun={...}}}}
 	// call / sel / call / sel / ...
+	var chainRoot ast.Node
+	var chains []ast.Node
 	for i := 1; i < len(stack); i++ {
-		var chainRoot ast.Node
-		var chains []ast.Node
 		n := stack[i]
 		if i%2 == 0 { // call
 			if IsNode[*ast.CallExpr](n) {
@@ -294,17 +408,16 @@ func collectChainCalls(m *Matcher, calls map[ast.Node]*ast.FuncDecl, stack []ast
 			chainRoot = stack[i-1].(*ast.CallExpr)
 			chains = stack[:i]
 		}
-		_ = chains
 		if _, has := calls[chainRoot]; !has {
-			calls[chainRoot] = outerFunDecl(m, i, stack)
+			calls[chainRoot] = outerFunDecl(i, stack)
 		} else {
 			// skip non-leafNode
 		}
-		break
 	}
+	return chains
 }
 
-func outerFunDecl(m *Matcher, start int, stack []ast.Node) (fun *ast.FuncDecl) {
+func outerFunDecl(start int, stack []ast.Node) (fun *ast.FuncDecl) {
 	for j := start; j < len(stack); j++ {
 		if IsNode[*ast.FuncDecl](stack[j]) {
 			fun = stack[j].(*ast.FuncDecl)

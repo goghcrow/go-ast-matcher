@@ -1,0 +1,34 @@
+
+-- println.stdout --
+node: println("hi")
+
+node: A{}.println("hi")
+
+-- a/a.go --
+package main
+
+func main() {
+	println("hi")
+	print("hi")
+
+	A{}.print("hi")
+	A{}.println("hi")
+}
+
+func println(s string) {}
+
+type A struct{}
+func (A) println(s string) {}
+func (A) print(s string) {}
+
+-- b/b.go --
+package main
+
+func main() {
+	println(show) // not call
+}
+
+func show(s string) {}
+
+type println func(s string)
+

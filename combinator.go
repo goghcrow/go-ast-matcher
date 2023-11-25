@@ -6,6 +6,7 @@ import (
 	"go/types"
 	"reflect"
 	"regexp"
+	"strconv"
 )
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Combinators ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
@@ -79,7 +80,7 @@ func Any[E ElemPattern, S SlicePattern](m *Matcher, p E) S {
 	})
 }
 
-func SliceLen[T SlicePattern](m *Matcher, p Predicate[int]) T {
+func SliceLenOf[T SlicePattern](m *Matcher, p Predicate[int]) T {
 	return MkPattern[T](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
 		if n == nil /*ast.Node(nil)*/ {
 			return false
@@ -89,24 +90,24 @@ func SliceLen[T SlicePattern](m *Matcher, p Predicate[int]) T {
 }
 
 func SliceLenEQ[T SlicePattern](m *Matcher, n int) T {
-	return SliceLen[T](m, func(len int) bool { return len == n })
+	return SliceLenOf[T](m, func(len int) bool { return len == n })
 }
 func SliceLenGT[T SlicePattern](m *Matcher, n int) T {
-	return SliceLen[T](m, func(len int) bool { return len > n })
+	return SliceLenOf[T](m, func(len int) bool { return len > n })
 }
 func SliceLenGE[T SlicePattern](m *Matcher, n int) T {
-	return SliceLen[T](m, func(len int) bool { return len >= n })
+	return SliceLenOf[T](m, func(len int) bool { return len >= n })
 }
 func SliceLenLT[T SlicePattern](m *Matcher, n int) T {
-	return SliceLen[T](m, func(len int) bool { return len < n })
+	return SliceLenOf[T](m, func(len int) bool { return len < n })
 }
 func SliceLenLE[T SlicePattern](m *Matcher, n int) T {
-	return SliceLen[T](m, func(len int) bool { return len >= n })
+	return SliceLenOf[T](m, func(len int) bool { return len >= n })
 }
 
 // ↓↓↓↓↓↓↓↓↓↓↓ Ident ↓↓↓↓↓↓↓↓↓↓↓↓
 
-func IdentPredicate(m *Matcher, p Predicate[string]) IdentPattern {
+func IdentOf(m *Matcher, p Predicate[*ast.Ident]) IdentPattern {
 	return m.mkIdentPattern(func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
 		if n == nil /*ast.Node(nil)*/ {
 			return false
@@ -115,14 +116,14 @@ func IdentPredicate(m *Matcher, p Predicate[string]) IdentPattern {
 		if ident == nil {
 			return false
 		}
-		return p(ident.Name)
+		return p(ident)
 	})
 }
-func IdentEqual(m *Matcher, name string) IdentPattern {
-	return IdentPredicate(m, func(s string) bool { return name == s })
+func IdentNameEqual(m *Matcher, name string) IdentPattern {
+	return IdentOf(m, func(id *ast.Ident) bool { return name == id.Name })
 }
-func IdentRegex(m *Matcher, reg *regexp.Regexp) IdentPattern {
-	return IdentPredicate(m, func(s string) bool { return reg.Match([]byte(s)) })
+func IdentNameRegex(m *Matcher, reg *regexp.Regexp) IdentPattern {
+	return IdentOf(m, func(id *ast.Ident) bool { return reg.Match([]byte(id.Name)) })
 }
 
 func ObjectOf(m *Matcher, pred Predicate[types.Object]) IdentPattern {
@@ -242,7 +243,7 @@ func RecvOf(m *Matcher, f func(recv *ast.Field) bool) FieldListPattern {
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓ BasicLit ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
-func BasicLitKind(m *Matcher, kind token.Token) ExprPattern {
+func BasicLitKindOf(m *Matcher, kind token.Token) ExprPattern {
 	return MkPattern[ExprPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
 		// Notice: ExprPattern returns, so param n of callback is ast.Expr
 		// n is BasicLit expr and not nil
@@ -251,5 +252,23 @@ func BasicLitKind(m *Matcher, kind token.Token) ExprPattern {
 			return false
 		}
 		return lit.Kind == kind
+	})
+}
+
+func TagOf(m *Matcher, p Predicate[*reflect.StructTag]) BasicLitPattern {
+	return MkPattern[BasicLitPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		if n == nil /*ast.Node(nil)*/ {
+			return false
+		}
+		tagLit, _ := n.(*ast.BasicLit)
+		if tagLit == nil {
+			// return false
+			return p(nil)
+		}
+
+		assert(tagLit.Kind == token.STRING, "")
+		tag, _ := strconv.Unquote(tagLit.Value)
+		structTag := reflect.StructTag(tag)
+		return p(&structTag)
 	})
 }

@@ -5,7 +5,7 @@ package main
 import "basic_lit"
 
 type x struct {
-    Field `json: "hello"`
+    Field string `json:"hello"`
 }
 
 func main() {
@@ -18,5 +18,5 @@ pos : a.go:3:8
 var : "basic_lit"
 
 -- tag.stdout --
-pos : a.go:6:11
-var : `json: "hello"`
+pos : a.go:6:18
+var : `json:"hello"`
