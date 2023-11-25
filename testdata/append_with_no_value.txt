@@ -1,0 +1,50 @@
+
+example from go analysis tool
+
+-- append.stdout --
+node: append(sli)
+
+node: append([]string{"a"})
+
+-- a.go --
+package a
+
+func badAppendSlice1() {
+	sli := []string{"a", "b", "c"}
+	sli = append(sli) // want "append with no values"
+}
+
+func badAppendSlice2() {
+	_ = append([]string{"a"}) // want "append with no values"
+}
+
+func goodAppendSlice1() {
+	sli := []string{"a", "b", "c"}
+	sli = append(sli, "d")
+}
+
+func goodAppendSlice2() {
+	sli1 := []string{"a", "b", "c"}
+	sli2 := []string{"d", "e", "f"}
+	sli1 = append(sli1, sli2...)
+}
+
+func goodAppendSlice3() {
+	sli := []string{"a", "b", "c"}
+	sli = append(sli, "d", "e", "f")
+}
+
+
+-- b.go --
+package b
+
+func append(args ...interface{}) []int {
+	println(args)
+	return []int{0}
+}
+
+func userdefine() {
+	sli := []int{1, 2, 3}
+	sli = append(sli, 4, 5, 6)
+	sli = append(sli)
+}

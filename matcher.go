@@ -33,13 +33,13 @@ type MatchOption func(*MatchFlags)
 // WithLoadAll is slowly, but you can match external types
 func WithLoadAll() MatchOption     { return func(opts *MatchFlags) { opts.loadAll = true } }
 func WithUnparenExpr() MatchOption { return func(opts *MatchFlags) { opts.unparenExpr = true } }
-func WithMatchCallEllipsis() MatchOption {
+func WithCallEllipsisMatch() MatchOption {
 	return func(opts *MatchFlags) { opts.matchCallEllipsis = true }
 }
-func WithFilterPkg(f func(pkg *packages.Package) bool) MatchOption {
+func WithPkgFilter(f func(pkg *packages.Package) bool) MatchOption {
 	return func(opts *MatchFlags) { opts.pkgFilter = f }
 }
-func WithFilterFile(f func(filename string) bool) MatchOption {
+func WithFileFilter(f func(filename string) bool) MatchOption {
 	return func(opts *MatchFlags) { opts.fileFilter = f }
 }
 

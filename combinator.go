@@ -79,13 +79,29 @@ func Any[E ElemPattern, S SlicePattern](m *Matcher, p E) S {
 	})
 }
 
-func Len[T SlicePattern](m *Matcher, p Predicate[int]) T {
+func SliceLen[T SlicePattern](m *Matcher, p Predicate[int]) T {
 	return MkPattern[T](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
 		if n == nil /*ast.Node(nil)*/ {
 			return false
 		}
 		return p(reflect.ValueOf(n).Len())
 	})
+}
+
+func SliceLenEQ[T SlicePattern](m *Matcher, n int) T {
+	return SliceLen[T](m, func(len int) bool { return len == n })
+}
+func SliceLenGT[T SlicePattern](m *Matcher, n int) T {
+	return SliceLen[T](m, func(len int) bool { return len > n })
+}
+func SliceLenGE[T SlicePattern](m *Matcher, n int) T {
+	return SliceLen[T](m, func(len int) bool { return len >= n })
+}
+func SliceLenLT[T SlicePattern](m *Matcher, n int) T {
+	return SliceLen[T](m, func(len int) bool { return len < n })
+}
+func SliceLenLE[T SlicePattern](m *Matcher, n int) T {
+	return SliceLen[T](m, func(len int) bool { return len >= n })
 }
 
 // ↓↓↓↓↓↓↓↓↓↓↓ Ident ↓↓↓↓↓↓↓↓↓↓↓↓
@@ -107,6 +123,26 @@ func IdentEqual(m *Matcher, name string) IdentPattern {
 }
 func IdentRegex(m *Matcher, reg *regexp.Regexp) IdentPattern {
 	return IdentPredicate(m, func(s string) bool { return reg.Match([]byte(s)) })
+}
+
+func ObjectOf(m *Matcher, pred Predicate[types.Object]) IdentPattern {
+	return MkPattern[IdentPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		if n == nil /*ast.Node(nil)*/ {
+			return false
+		}
+		id := n.(*ast.Ident)
+		if id == nil {
+			return false
+		}
+		return pred(m.ObjectOf(id))
+	})
+}
+
+func IsBuiltin(m *Matcher) IdentPattern {
+	return ObjectOf(m, func(obj types.Object) bool {
+		_, ok := obj.(*types.Builtin)
+		return ok
+	})
 }
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓ Type ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓

@@ -96,6 +96,7 @@ var patterns = map[string]func(m *Matcher) ast.Node{
 			),
 		}
 	},
+	"append_with_no_value/append": PatternOfAppendWithNoValue,
 }
 
 func TestRun(t *testing.T) {
@@ -137,7 +138,8 @@ func TestRun(t *testing.T) {
 				m := NewMatcher(dir, []string{PatternAll})
 				m.Walk(func(m *Matcher, file *ast.File) {
 					t.Log(patternName)
-					m.MatchNode(patterns[patternName](m), file, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
+					pattern := patterns[patternName](m)
+					m.MatchNode(pattern, file, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
 						n := c.Node()
 						parent := c.Parent()
 						bind := binds["var"]

@@ -11,16 +11,13 @@ import (
 	"golang.org/x/tools/go/ast/astutil"
 )
 
-func OrPatternExample(m *Matcher) {
-	// func Function() {}
-	// func (...) Function() {}
-	// func Method() {}
-	// func (...) Method() {}
-	_ = &ast.FuncDecl{
-		Name: Or[IdentPattern](m,
-			IdentEqual(m, "Function"),
-			IdentEqual(m, "Method"),
+func PatternOfAppendWithNoValue(m *Matcher) ast.Node {
+	return &ast.CallExpr{
+		Fun: And(m,
+			IdentEqual(m, "append"),
+			IsBuiltin(m),
 		),
+		Args: SliceLenEQ[ExprsPattern](m, 1),
 	}
 }
 
@@ -225,9 +222,13 @@ func GrepGormTablerTableName(dir string) {
 	})
 }
 
-func GrepGormChainAPI(dir string) {
+func GrepGormChainAPI(dir string, filter func(*Matcher, *ast.FuncDecl) bool, opts ...MatchOption) {
 	// Notice: we want match node by outer type, so WithLoadAll needed
-	m := NewMatcher(dir, []string{PatternAll}, WithLoadAll())
+	m := NewMatcher(
+		dir,
+		[]string{PatternAll},
+		append(opts, WithLoadAll())...,
+	)
 
 	ptrOfGormDB := types.NewPointer(m.MustLookupType("gorm.io/gorm.DB"))
 	pattern := &ast.CallExpr{
@@ -246,51 +247,79 @@ func GrepGormChainAPI(dir string) {
 		}),
 	}
 
-	xs := map[ast.Node][]ast.Node{}
+	calls := map[ast.Node]*ast.FuncDecl{}
 	m.Match(pattern, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
-		fmt.Println("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
-		fmt.Println(ansi.Blue.Text(m.Filename))
-		// fmt.Println(m.ShowNode(c.Node()))
 		assert(stack[0].(*ast.CallExpr) == c.Node().(*ast.CallExpr), "impossible")
-
-		// skip self
-		// call{fun=select{x=call{fun={...}}}}
-		// call / sel / call / sel / ...
-		for i := 1; i < len(stack); i++ {
-			cur := stack[i]
-			if i%2 == 0 { // call
-				if IsNode[*ast.CallExpr](cur) {
-					continue
-				}
-				chainRoot := stack[i-1].(*ast.SelectorExpr)
-				if xs[chainRoot] == nil {
-					xs[chainRoot] = stack[:i]
-				} else {
-					l1 := len(xs[chainRoot])
-					l2 := len(stack[:i])
-					assert(l1 >= l2, "because post order")
-				}
-				break
-			} else { // sel
-				// sel != call
-				if IsNode[*ast.SelectorExpr](cur) {
-					continue
-				}
-				chainRoot := stack[i-1].(*ast.CallExpr)
-				if xs[chainRoot] == nil {
-					xs[chainRoot] = stack[:i]
-				} else {
-					l1 := len(xs[chainRoot])
-					l2 := len(stack[:i])
-					assert(l1 >= l2, "because post order")
-				}
-				break
-			}
-		}
-		fmt.Println("↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑")
+		collectChainCalls(m, calls, stack)
 	})
 
-	for root := range xs {
-		fmt.Println(m.ShowNode(root))
+	groupedChainCalls := groupChainCalls(calls)
+	for fun, xs := range groupedChainCalls {
+		if !filter(m, fun) {
+			fmt.Println("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
+			fmt.Println(ansi.Blue.Text(m.ShowPos(fun)))
+			fmt.Println(ansi.Blue.Text(fun.Name.String()))
+			fmt.Println(m.ShowNode(fun.Type))
+
+			for _, it := range xs {
+				fmt.Println(m.ShowNode(it))
+			}
+
+			fmt.Println("↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑")
+		}
 	}
+}
+
+func collectChainCalls(m *Matcher, calls map[ast.Node]*ast.FuncDecl, stack []ast.Node) {
+	// skip self
+	// call{fun=select{x=call{fun={...}}}}
+	// call / sel / call / sel / ...
+	for i := 1; i < len(stack); i++ {
+		var chainRoot ast.Node
+		var chains []ast.Node
+		n := stack[i]
+		if i%2 == 0 { // call
+			if IsNode[*ast.CallExpr](n) {
+				continue
+			}
+			// the leafNode contains the longest chain methods in post-order
+			chainRoot = stack[i-1].(*ast.SelectorExpr)
+			chains = stack[:i]
+		} else { // sel
+			// sel != call
+			if IsNode[*ast.SelectorExpr](n) {
+				continue
+			}
+			// the leafNode contains the longest chain methods in post-order
+			chainRoot = stack[i-1].(*ast.CallExpr)
+			chains = stack[:i]
+		}
+		_ = chains
+		if _, has := calls[chainRoot]; !has {
+			calls[chainRoot] = outerFunDecl(m, i, stack)
+		} else {
+			// skip non-leafNode
+		}
+		break
+	}
+}
+
+func outerFunDecl(m *Matcher, start int, stack []ast.Node) (fun *ast.FuncDecl) {
+	for j := start; j < len(stack); j++ {
+		if IsNode[*ast.FuncDecl](stack[j]) {
+			fun = stack[j].(*ast.FuncDecl)
+		}
+	}
+	return
+}
+
+func groupChainCalls(m map[ast.Node]*ast.FuncDecl) map[*ast.FuncDecl][]ast.Node {
+	g := map[*ast.FuncDecl][]ast.Node{}
+	for root, fun := range m {
+		if fun == nil {
+			continue
+		}
+		g[fun] = append(g[fun], root)
+	}
+	return g
 }
