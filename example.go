@@ -123,14 +123,23 @@ func PatternOfCallFunOrMethodWithSpecName(name string) func(m *Matcher) ast.Node
 }
 
 func PatternOfCallAtomicAdder(m *Matcher) ast.Node {
-	adders := regexp.MustCompile("(AddInt32|AddInt64|AddUint32|AddUint64|AddUintptr)")
+	adders := regexp.MustCompile("^(AddInt64|AddUintptr)$")
 	return &ast.CallExpr{
-		Fun: &ast.SelectorExpr{
-			X: IdentOf(m, func(id *ast.Ident) bool {
-				pkg, ok := m.Uses[id].(*types.PkgName)
-				return ok && pkg.Imported().Path() == "sync/atomic"
-			}),
-			Sel: IdentNameRegex(m, adders),
+		Fun: SelectorOfPkgPath(m, "sync/atomic", adders),
+	}
+}
+
+func PatternOfAtomicSwapStructField(m *Matcher) ast.Node {
+	// atomic.AddInt64(&structObject.field, *)
+	return &ast.CallExpr{
+		Fun: SelectorOfPkgPath(m, "sync/atomic", regexp.MustCompile("^SwapInt64$")),
+		Args: []ast.Expr{
+			PtrOf(SelectorOfStructField(m, func(t *types.Struct) bool {
+				return true
+			}, func(t *types.Var) bool {
+				return true
+			})),
+			Wildcard[ExprPattern](m),
 		},
 	}
 }
@@ -309,7 +318,7 @@ func GrepGormTablerTableName(dir string) {
 			List: []ast.Stmt{
 				&ast.ReturnStmt{
 					Results: []ast.Expr{
-						Bind[ExprPattern](m, "tableName", BasicLitKindOf(m, token.STRING)),
+						Bind[ExprPattern](m, "tableName", BasicLitOfKind(m, token.STRING)),
 
 						// Or
 						// Bind[BasicLitPattern](m, "tableName", MkPattern[BasicLitPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {

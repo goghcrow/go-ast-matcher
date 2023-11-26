@@ -1,0 +1,35 @@
+-- a.go --
+package main
+
+type P int
+
+func (P) println(a any) { }
+
+func main() {
+    println("Hello, World!")
+    P(0).println("Hello, World!")
+}
+
+func foo() {
+    println("Hello, World!")
+    P(0).println("Hello, World!")
+}
+
+-- a.go.stdout --
+package main
+
+import "fmt"
+
+type P int
+
+func (P) println(a any) {}
+
+func main() {
+	fmt.Println("Hello, World!")
+	P(0).println("Hello, World!")
+}
+
+func foo() {
+	fmt.Println("Hello, World!")
+	P(0).println("Hello, World!")
+}

@@ -28,7 +28,7 @@ func basePositionOf(fset *token.FileSet, n ast.Node) string {
 	return s
 }
 
-var patterns = map[string]func(m *Matcher) ast.Node{
+var matchPatterns = map[string]func(m *Matcher) ast.Node{
 	"ident/int": func(m *Matcher) ast.Node {
 		// Can not only use Type to match
 		// var id int
@@ -50,50 +50,51 @@ var patterns = map[string]func(m *Matcher) ast.Node{
 	"append_with_no_value/append": PatternOfAppendWithNoValue,
 	"call/println":                PatternOfCallFunOrMethodWithSpecName("println"),
 	"atomic/adder":                PatternOfCallAtomicAdder,
+	"atomic/swap_struct_field":    PatternOfAtomicSwapStructField,
 	"basiclit/import":             PatternOfAllImportSpec,
 	"basiclit/tag":                PatternOfStructFieldWithJsonTag,
 }
 
-func TestRun(t *testing.T) {
-	files, err := filepath.Glob("testdata/*.txt")
+func TestMatchRun(t *testing.T) {
+	files, err := filepath.Glob("testdata/match/*.txt")
 	fatalIf(t, err)
 
-	for _, file := range files {
-		filename := filepath.Base(file)
-		ext := filepath.Ext(file)
+	for _, testFile := range files {
+		filename := filepath.Base(testFile)
+		ext := filepath.Ext(testFile)
 		testName := filename[:len(filename)-len(ext)]
 
-		t.Run(filepath.Base(file), func(t *testing.T) {
-			t.Log(file)
-			ar, err := txtar.ParseFile(file)
-			fatalIf(t, err)
+		t.Log(testFile)
+		ar, err := txtar.ParseFile(testFile)
+		fatalIf(t, err)
 
-			dir := t.TempDir()
-			err = os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module m\n"), 0666)
-			fatalIf(t, err)
+		dir := t.TempDir()
+		err = os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module m\n"), 0666)
+		fatalIf(t, err)
 
-			var testCase = map[string]txtar.File{}
-			for _, file := range ar.Files {
-				if filepath.Ext(file.Name) == ".stdout" {
-					testCase[file.Name[:len(file.Name)-len(".stdout")]] = file
-					continue
-				}
-				filename := filepath.Join(dir, file.Name)
-				err = os.MkdirAll(filepath.Dir(filename), 0777)
-				fatalIf(t, err)
-				err = os.WriteFile(filename, file.Data, 0666)
-				fatalIf(t, err)
+		var arFiles = map[string]txtar.File{}
+		for _, f := range ar.Files {
+			if filepath.Ext(f.Name) == ".stdout" {
+				arFiles[f.Name[:len(f.Name)-len(".stdout")]] = f
+				continue
 			}
+			filename := filepath.Join(dir, f.Name)
+			err = os.MkdirAll(filepath.Dir(filename), 0777)
+			fatalIf(t, err)
+			err = os.WriteFile(filename, f.Data, 0666)
+			fatalIf(t, err)
+		}
 
-			// baseName := strings.TrimSpace(string(ar.Comment))
-			for patternName, wantStdout := range testCase {
+		// baseName := strings.TrimSpace(string(ar.Comment))
+		for patternName, wantStdout := range arFiles {
+			t.Run(filepath.Base(testFile), func(t *testing.T) {
 				stdout := ""
 				patternName = testName + "/" + patternName
 
 				m := NewMatcher(dir, []string{PatternAll})
 				m.Walk(func(m *Matcher, file *ast.File) {
 					t.Log(patternName)
-					pattern := patterns[patternName](m)
+					pattern := matchPatterns[patternName](m)
 					m.MatchNode(pattern, file, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
 						n := c.Node()
 						parent := c.Parent()
@@ -121,24 +122,7 @@ func TestRun(t *testing.T) {
 					t.Errorf("stdout:\n%s", have)
 					t.Errorf("want:\n%s", want)
 				}
-			}
-		})
+			})
+		}
 	}
 }
-
-// Bind[NodePattern](m, "var", MkPattern[NodePattern](m))
-// Bind[StmtPattern](m, "var", MkPattern[StmtPattern](m))
-// Bind[ExprPattern](m, "var", MkPattern[ExprPattern](m))
-// Bind[DeclPattern](m, "var", MkPattern[DeclPattern](m))
-// Bind[IdentPattern](m, "var", MkPattern[IdentPattern](m))
-// Bind[FieldPattern](m, "var", MkPattern[FieldPattern](m))
-// Bind[FieldListPattern](m, "var", MkPattern[FieldListPattern](m))
-// Bind[CallExprPattern](m, "var", MkPattern[CallExprPattern](m))
-// Bind[FuncTypePattern](m, "var", MkPattern[FuncTypePattern](m))
-// Bind[BlockStmtPattern](m, "var", MkPattern[BlockStmtPattern](m))
-// Bind[TokenPattern](m, "var", MkPattern[TokenPattern](m))
-// Bind[BasicLitPattern](m, "var", MkPattern[BasicLitPattern](m))
-// Bind[StmtsPattern](m, "var", MkPattern[StmtsPattern](m))
-// Bind[ExprsPattern](m, "var", MkPattern[ExprsPattern](m))
-// Bind[IdentsPattern](m, "var", MkPattern[IdentsPattern](m))
-// Bind[FieldsPattern](m, "var", MkPattern[FieldsPattern](m))

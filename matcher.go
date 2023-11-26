@@ -59,6 +59,7 @@ type Matcher struct {
 	*types.Info
 
 	// current file
+	File     *ast.File
 	Filename string
 
 	// MatchFun Index, ref MkXXXPattern
@@ -105,8 +106,9 @@ func (m *Matcher) Walk(f func(m *Matcher, file *ast.File)) {
 			m.setPkg(pkg)
 			for i, filename := range pkg.CompiledGoFiles {
 				m.Filename = filename
+				m.File = pkg.Syntax[i]
 				if m.fileFilter == nil || m.fileFilter(filename) {
-					f(m, pkg.Syntax[i])
+					f(m, m.File)
 				}
 			}
 		}

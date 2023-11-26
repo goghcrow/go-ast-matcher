@@ -241,9 +241,48 @@ func RecvOf(m *Matcher, f func(recv *ast.Field) bool) FieldListPattern {
 	})
 }
 
+// ↓↓↓↓↓↓↓↓↓↓↓↓ Selector ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+func SelectorOfPkgPath(m *Matcher, path string, reg *regexp.Regexp) *ast.SelectorExpr {
+	return SelectorOfPkg(m, func(pkg *types.Package) bool {
+		return pkg.Path() == path
+	}, func(ident *ast.Ident) bool {
+		return reg.MatchString(ident.Name)
+	})
+}
+
+func SelectorOfPkg(m *Matcher, pPkg Predicate[*types.Package], pId Predicate[*ast.Ident]) *ast.SelectorExpr {
+	return &ast.SelectorExpr{
+		X: IdentOf(m, func(id *ast.Ident) bool {
+			pkg, ok := m.Uses[id].(*types.PkgName)
+			return ok && pPkg(pkg.Imported())
+		}),
+		Sel: IdentOf(m, pId),
+	}
+}
+
+func SelectorOfStructField(m *Matcher, pStruct Predicate[*types.Struct], pField Predicate[*types.Var]) ExprPattern {
+	// must be struct field selector
+	return And(m,
+		PatternOf[ExprPattern](m, &ast.SelectorExpr{
+			X: TypeOf[ExprPattern](m, func(ty types.Type) bool {
+				assert(ty != nil, "invalid")
+				ts, ok := ty.Underlying().(*types.Struct)
+				return ok && pStruct(ts)
+			}),
+		}),
+		MkPattern[ExprPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+			sel, _ := n.(*ast.SelectorExpr) // has confirmed
+			assert(sel != nil && m.Selections[sel] != nil, "invalid")
+			tv, ok := m.Selections[sel].Obj().(*types.Var)
+			return ok && tv.IsField() && pField(tv)
+		}),
+	)
+}
+
 // ↓↓↓↓↓↓↓↓↓↓↓↓ BasicLit ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
-func BasicLitKindOf(m *Matcher, kind token.Token) ExprPattern {
+func BasicLitOfKind(m *Matcher, kind token.Token) ExprPattern {
 	return MkPattern[ExprPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
 		// Notice: ExprPattern returns, so param n of callback is ast.Expr
 		// n is BasicLit expr and not nil
@@ -271,4 +310,13 @@ func TagOf(m *Matcher, p Predicate[*reflect.StructTag]) BasicLitPattern {
 		structTag := reflect.StructTag(tag)
 		return p(&structTag)
 	})
+}
+
+// ↓↓↓↓↓↓↓↓↓↓↓↓ Unary ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+func PtrOf(expr ast.Expr) *ast.UnaryExpr {
+	return &ast.UnaryExpr{
+		Op: token.AND,
+		X:  expr,
+	}
 }

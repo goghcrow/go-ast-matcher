@@ -1,8 +1,10 @@
 
 -- adder.stdout --
-node: atomic.AddInt32(&x, 1)
-
 node: atomic.AddUintptr(&ptr, 1)
+
+
+-- swap_struct_field.stdout --
+node: atomic.SwapInt64(&s{}.i, 1)
 
 -- a.go --
 package a
@@ -17,4 +19,11 @@ func main() {
 
 	var ptr uintptr
 	atomic.AddUintptr(&ptr, 1)
+}
+
+func swapStructField() {
+    type s struct {
+        i int64
+    }
+    atomic.SwapInt64(&s{}.i, 1)
 }
