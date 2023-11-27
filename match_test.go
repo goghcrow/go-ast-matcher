@@ -48,7 +48,7 @@ var matchPatterns = map[string]func(m *Matcher) ast.Node{
 	"ident/val_spec":              PatternOfValSpec,
 	"ident/func_name":             PatternOfAllFuncOrMethodDeclName,
 	"append_with_no_value/append": PatternOfAppendWithNoValue,
-	"call/println":                PatternOfCallFunOrMethodWithSpecName("println"),
+	"call/println":                MkPatternOfCallFunOrMethodWithSpecName("println"),
 	"atomic/adder":                PatternOfCallAtomicAdder,
 	"atomic/swap_struct_field":    PatternOfAtomicSwapStructField,
 	"basiclit/import":             PatternOfAllImportSpec,

@@ -100,6 +100,11 @@ func (m *Matcher) setPkg(pkg *packages.Package) {
 	m.Package = pkg.Types
 }
 
+func (m *Matcher) setFile(filename string, file *ast.File) {
+	m.Filename = filename
+	m.File = file
+}
+
 func (m *Matcher) Walk(f func(m *Matcher, file *ast.File)) {
 	for _, pkg := range m.Init {
 		if m.pkgFilter == nil || m.pkgFilter(pkg) {
@@ -128,6 +133,20 @@ func (m *Matcher) Match(pattern ast.Node, f Callback) {
 type Callback func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds)
 
 type stackBuilder func(node ast.Node) []ast.Node
+
+func (m *Matcher) matched(pattern, node ast.Node) (matched bool) {
+	var abort = new(int)
+	defer func() {
+		if r := recover(); r != nil && r != abort {
+			panic(r)
+		}
+	}()
+	m.MatchNode(pattern, node, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
+		matched = true
+		panic(abort)
+	})
+	return matched
+}
 
 func (m *Matcher) MatchNode(pattern, node ast.Node, f Callback) {
 	buildStack := m.mkStackBuilder(node)

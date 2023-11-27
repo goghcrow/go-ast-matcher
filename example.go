@@ -107,7 +107,7 @@ func PatternOfAppendWithNoValue(m *Matcher) ast.Node {
 	}
 }
 
-func PatternOfCallFunOrMethodWithSpecName(name string) func(m *Matcher) ast.Node {
+func MkPatternOfCallFunOrMethodWithSpecName(name string) func(m *Matcher) ast.Node {
 	return func(m *Matcher) ast.Node {
 		isSpecNameFun := IdentOf(m, func(id *ast.Ident) bool {
 			isFun := !m.Types[id].IsType() // not type cast
@@ -118,6 +118,22 @@ func PatternOfCallFunOrMethodWithSpecName(name string) func(m *Matcher) ast.Node
 				PatternOf[ExprPattern](m, isSpecNameFun),                         // cast id pattern to expr pattern
 				PatternOf[ExprPattern](m, &ast.SelectorExpr{Sel: isSpecNameFun}), // cast to expr pattern
 			),
+		}
+	}
+}
+
+func MkPatternOfSelectorNameReg(name *regexp.Regexp) func(m *Matcher) *ast.CallExpr {
+	return func(m *Matcher) *ast.CallExpr {
+		// match *.XXX($args), and bind args to variable
+		return &ast.CallExpr{
+			Fun: &ast.SelectorExpr{
+				// X: Wildcard[ExprPattern](m),
+				Sel: IdentOf(m, func(id *ast.Ident) bool {
+					isFun := !m.Types[id].IsType() // not type cast
+					return isFun && name.MatchString(id.Name)
+				}),
+			},
+			Args: MkVar[ExprsPattern](m, "args"),
 		}
 	}
 }
@@ -144,23 +160,50 @@ func PatternOfAtomicSwapStructField(m *Matcher) ast.Node {
 	}
 }
 
-func GrepMethodWithSpecTypeParameter(dir string, qualifiedType string, opts ...MatchOption) {
-	m := NewMatcher(dir, []string{PatternAll}, opts...)
-	ty := m.MustLookupType(qualifiedType)
-	fieldTypeIs := PatternOf[FieldPattern](m, &ast.Field{
-		Type: Or[ExprPattern](m,
-			TypeAssignableTo[ExprPattern](m, ty),
-			TypeAssignableTo[ExprPattern](m, types.NewPointer(ty)),
-		),
-	})
-	pattern := &ast.FuncDecl{
-		Recv: IsMethod(m),
+func PatternOfFuncDeclHasAnyParam(m *Matcher, param *ast.Field) *ast.FuncDecl {
+	return &ast.FuncDecl{
 		Type: &ast.FuncType{
 			Params: &ast.FieldList{
-				List: Any[FieldPattern, FieldsPattern](m, fieldTypeIs),
+				List: Any[FieldsPattern](m, param),
 			},
 		},
 	}
+}
+
+func PatternOfFuncDeclHasAnyParamNode(m *Matcher, param *ast.Field) *ast.FuncDecl {
+	return &ast.FuncDecl{
+		Type: &ast.FuncType{
+			Params: &ast.FieldList{
+				List: Any[FieldsPattern](m, param),
+			},
+		},
+	}
+}
+
+func PatternOfMethodHasAnyParam(m *Matcher, param *ast.Field) *ast.FuncDecl {
+	return &ast.FuncDecl{
+		Recv: IsMethod(m),
+		Type: &ast.FuncType{
+			Params: &ast.FieldList{
+				List: Any[FieldsPattern](m, param),
+			},
+		},
+	}
+}
+
+func GrepFuncDeclWithSpecTypeOfParam(dir string, qualifiedType string, opts ...MatchOption) {
+	m := NewMatcher(dir, []string{PatternAll}, opts...)
+
+	ty := m.MustLookupType(qualifiedType)
+	pattern := PatternOfMethodHasAnyParam(m,
+		&ast.Field{
+			Type: Or(m,
+				TypeAssignableTo[ExprPattern](m, ty),
+				TypeAssignableTo[ExprPattern](m, types.NewPointer(ty)),
+			),
+		},
+	)
+
 	m.Match(pattern, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
 		fmt.Println("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
 		fmt.Println(ansi.Blue.Text(m.Filename))
@@ -226,18 +269,8 @@ func GrepInterface(dir string) {
 func GrepDBProxy(dir string) {
 	m := NewMatcher(dir, []string{PatternAll})
 
-	// match *.GetDBProxy($args), and bind args to variable
-	// equals to regex: .*?\.GetDBProxy\(?<args>.*?\)
-	pattern := &ast.CallExpr{
-		Fun: &ast.SelectorExpr{
-			// X: Wildcard[ExprPattern](m),
-			Sel: Or[IdentPattern](m,
-				IdentNameEqual(m, "GetDBProxy"),
-				IdentNameEqual(m, "GetDB"),
-			),
-		},
-		Args: MkVar[ExprsPattern](m, "args"),
-	}
+	fNames := regexp.MustCompile("^(GetDBProxy|GetDB)$")
+	pattern := MkPatternOfSelectorNameReg(fNames)(m)
 
 	m.Match(pattern, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
 		fmt.Println("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
@@ -346,6 +379,76 @@ func GrepGormTablerTableName(dir string) {
 }
 
 func GrepGormChainAPI(dir string, filter func(*Matcher, *ast.FuncDecl) bool, opts ...MatchOption) {
+	type (
+		outerFun = *ast.FuncDecl
+		rootNode = ast.Node
+	)
+
+	var (
+		cache       = map[*ast.FuncDecl]bool{}
+		filterFDecl = func(m *Matcher, f *ast.FuncDecl) bool {
+			if ok, has := cache[f]; has {
+				return ok
+			}
+			ok := filter(m, f)
+			cache[f] = ok
+			return ok
+		}
+		outerFunDecl = func(start int, stack []ast.Node) (fun *ast.FuncDecl) {
+			for j := start; j < len(stack); j++ {
+				if IsNode[*ast.FuncDecl](stack[j]) {
+					fun = stack[j].(*ast.FuncDecl)
+				}
+			}
+			return
+		}
+		groupChainCalls = func(m map[ast.Node]*ast.FuncDecl) map[*ast.FuncDecl][]ast.Node {
+			g := map[*ast.FuncDecl][]ast.Node{}
+			for root, fun := range m {
+				if fun == nil {
+					continue
+				}
+				g[fun] = append(g[fun], root)
+			}
+			return g
+		}
+		collectChainCalls = func(m *Matcher, calls map[rootNode]outerFun, stack []ast.Node) []ast.Node {
+			// skip self
+			// call{fun=select{x=call{fun={...}}}}
+			// call / sel / call / sel / ...
+			var chainRoot ast.Node
+			var chains []ast.Node
+			for i := 1; i < len(stack); i++ {
+				n := stack[i]
+				if i%2 == 0 { // call
+					if IsNode[*ast.CallExpr](n) {
+						continue
+					}
+					// the leafNode contains the longest chain methods in post-order
+					chainRoot = stack[i-1]
+					chains = stack[:i]
+				} else { // sel
+					// sel != call
+					if IsNode[*ast.SelectorExpr](n) {
+						continue
+					}
+					// the leafNode contains the longest chain methods in post-order
+					chainRoot = stack[i-1]
+					chains = stack[:i]
+				}
+
+				// skip non-leafNode
+				if _, has := calls[chainRoot]; !has {
+					f := outerFunDecl(i, stack)
+					if filterFDecl(m, f) {
+						calls[chainRoot] = f
+					}
+				}
+			}
+			return chains
+		}
+	)
+
 	// Notice: we want match node by outer type, so WithLoadAll needed
 	m := NewMatcher(
 		dir,
@@ -353,7 +456,6 @@ func GrepGormChainAPI(dir string, filter func(*Matcher, *ast.FuncDecl) bool, opt
 		append(opts, WithLoadAll())...,
 	)
 
-	ptrOfGormDB := types.NewPointer(m.MustLookupType("gorm.io/gorm.DB"))
 	pattern := &ast.CallExpr{
 		Fun: TypeOf[ExprPattern](m, func(t types.Type) bool {
 			sig, ok := t.Underlying().(*types.Signature)
@@ -366,82 +468,29 @@ func GrepGormChainAPI(dir string, filter func(*Matcher, *ast.FuncDecl) bool, opt
 				return false
 			}
 			retTy := xs.At(0).Type()
-			return types.AssignableTo(retTy, ptrOfGormDB)
+			return types.AssignableTo(
+				retTy,
+				types.NewPointer(m.MustLookupType("gorm.io/gorm.DB")),
+			)
 		}),
 	}
 
-	calls := map[ast.Node]*ast.FuncDecl{}
+	calls := map[rootNode]outerFun{}
+
 	m.Match(pattern, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
-		assert(stack[0].(*ast.CallExpr) == c.Node().(*ast.CallExpr), "impossible")
-		collectChainCalls(calls, stack)
+		collectChainCalls(m, calls, stack)
 	})
 
 	groupedChainCalls := groupChainCalls(calls)
 	for fun, xs := range groupedChainCalls {
-		if !filter(m, fun) {
-			fmt.Println("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
-			fmt.Println(ansi.Blue.Text(m.ShowPos(fun)))
-			fmt.Println(ansi.Blue.Text(fun.Name.String()))
-			fmt.Println(m.ShowNode(fun.Type))
-
-			for _, it := range xs {
-				fmt.Println(m.ShowNode(it))
-			}
-
-			fmt.Println("↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑")
-		}
+		fmt.Println("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
+		fmt.Println(ansi.Blue.Text(m.ShowPos(fun)))
+		fmt.Println(ansi.Blue.Text(fun.Name.String()))
+		fmt.Println(m.ShowNode(fun.Type))
+		_ = xs
+		// for _, it := range xs {
+		// 	fmt.Println(m.ShowNode(it))
+		// }
+		fmt.Println("↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑")
 	}
-}
-
-func collectChainCalls(calls map[ast.Node]*ast.FuncDecl, stack []ast.Node) []ast.Node {
-	// skip self
-	// call{fun=select{x=call{fun={...}}}}
-	// call / sel / call / sel / ...
-	var chainRoot ast.Node
-	var chains []ast.Node
-	for i := 1; i < len(stack); i++ {
-		n := stack[i]
-		if i%2 == 0 { // call
-			if IsNode[*ast.CallExpr](n) {
-				continue
-			}
-			// the leafNode contains the longest chain methods in post-order
-			chainRoot = stack[i-1].(*ast.SelectorExpr)
-			chains = stack[:i]
-		} else { // sel
-			// sel != call
-			if IsNode[*ast.SelectorExpr](n) {
-				continue
-			}
-			// the leafNode contains the longest chain methods in post-order
-			chainRoot = stack[i-1].(*ast.CallExpr)
-			chains = stack[:i]
-		}
-		if _, has := calls[chainRoot]; !has {
-			calls[chainRoot] = outerFunDecl(i, stack)
-		} else {
-			// skip non-leafNode
-		}
-	}
-	return chains
-}
-
-func outerFunDecl(start int, stack []ast.Node) (fun *ast.FuncDecl) {
-	for j := start; j < len(stack); j++ {
-		if IsNode[*ast.FuncDecl](stack[j]) {
-			fun = stack[j].(*ast.FuncDecl)
-		}
-	}
-	return
-}
-
-func groupChainCalls(m map[ast.Node]*ast.FuncDecl) map[*ast.FuncDecl][]ast.Node {
-	g := map[*ast.FuncDecl][]ast.Node{}
-	for root, fun := range m {
-		if fun == nil {
-			continue
-		}
-		g[fun] = append(g[fun], root)
-	}
-	return g
 }

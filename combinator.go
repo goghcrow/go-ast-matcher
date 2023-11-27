@@ -64,7 +64,25 @@ func Or[T Pattern](m *Matcher, a, b T) T {
 
 // ↓↓↓↓↓↓↓↓↓↓↓ Slice ↓↓↓↓↓↓↓↓↓↓↓↓
 
-func Any[E ElemPattern, S SlicePattern](m *Matcher, p E) S {
+// func Any[E ElemPattern, S SlicePattern](m *Matcher, elPtn E) S {
+// 	return MkPattern[S](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+// 		if n == nil /*ast.Node(nil)*/ {
+// 			return false
+// 		}
+// 		xs := reflect.ValueOf(n)
+// 		fun := TryGetMatchFun[E](m, elPtn)
+// 		assert(fun != nil, "bad pattern")
+// 		for i := 0; i < xs.Len(); i++ {
+// 			node := xs.Index(i).Interface().(ast.Node)
+// 			if fun(m, node, stack, binds) {
+// 				return true
+// 			}
+// 		}
+// 		return false
+// 	})
+// }
+
+func Any[S SlicePattern](m *Matcher, p ast.Node) S {
 	return MkPattern[S](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
 		if n == nil /*ast.Node(nil)*/ {
 			return false
@@ -72,7 +90,7 @@ func Any[E ElemPattern, S SlicePattern](m *Matcher, p E) S {
 		xs := reflect.ValueOf(n)
 		for i := 0; i < xs.Len(); i++ {
 			node := xs.Index(i).Interface().(ast.Node)
-			if TryGetMatchFun[E](m, p)(m, node, stack, binds) {
+			if m.matched(p, node) {
 				return true
 			}
 		}

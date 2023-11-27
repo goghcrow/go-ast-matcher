@@ -36,6 +36,9 @@ func derefUnder(ty types.Type) types.Type {
 			break
 		}
 	}
+	if ty == nil {
+		println("")
+	}
 	return ty.Underlying()
 }
 
