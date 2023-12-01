@@ -134,14 +134,15 @@ type Callback func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds)
 
 type stackBuilder func(node ast.Node) []ast.Node
 
-func (m *Matcher) matched(pattern, node ast.Node) (matched bool) {
+// when any subtree of rootNode matched pattern, return immediately
+func (m *Matcher) matched(pattern, rootNode ast.Node) (matched bool) {
 	var abort = new(int)
 	defer func() {
 		if r := recover(); r != nil && r != abort {
 			panic(r)
 		}
 	}()
-	m.MatchNode(pattern, node, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
+	m.MatchNode(pattern, rootNode, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
 		matched = true
 		panic(abort)
 	})

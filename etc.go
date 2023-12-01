@@ -28,7 +28,8 @@ func typeId(obj types.Object) string {
 		return name
 	}
 }
-func derefUnder(ty types.Type) types.Type {
+
+func deref(ty types.Type) types.Type {
 	for {
 		if ptr, ok := ty.(*types.Pointer); ok {
 			ty = ptr.Elem()
@@ -36,10 +37,11 @@ func derefUnder(ty types.Type) types.Type {
 			break
 		}
 	}
-	if ty == nil {
-		println("")
-	}
-	return ty.Underlying()
+	return ty
+}
+
+func derefUnder(ty types.Type) types.Type {
+	return deref(ty).Underlying()
 }
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓ Show ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓

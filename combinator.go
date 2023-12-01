@@ -62,9 +62,16 @@ func Or[T Pattern](m *Matcher, a, b T) T {
 	})
 }
 
+// Any when any subtree of rootNode matched pattern, return immediately
+func Any[T Pattern](m *Matcher, pattern ast.Node) T {
+	return MkPattern[T](m, func(m *Matcher, rootNode ast.Node, stack []ast.Node, binds Binds) bool {
+		return m.matched(pattern, rootNode)
+	})
+}
+
 // ↓↓↓↓↓↓↓↓↓↓↓ Slice ↓↓↓↓↓↓↓↓↓↓↓↓
 
-// func Any[E ElemPattern, S SlicePattern](m *Matcher, elPtn E) S {
+// func Contains[E ElemPattern, S SlicePattern](m *Matcher, elPtn E) S {
 // 	return MkPattern[S](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
 // 		if n == nil /*ast.Node(nil)*/ {
 // 			return false
@@ -82,7 +89,7 @@ func Or[T Pattern](m *Matcher, a, b T) T {
 // 	})
 // }
 
-func Any[S SlicePattern](m *Matcher, p ast.Node) S {
+func Contains[S SlicePattern](m *Matcher, p ast.Node) S {
 	return MkPattern[S](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
 		if n == nil /*ast.Node(nil)*/ {
 			return false
@@ -309,6 +316,22 @@ func BasicLitOfKind(m *Matcher, kind token.Token) ExprPattern {
 			return false
 		}
 		return lit.Kind == kind
+	})
+}
+
+func StringLitOf(m *Matcher, p Predicate[string]) ExprPattern {
+	return MkPattern[ExprPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		// Notice: ExprPattern returns, so param n of callback is ast.Expr
+		// n is BasicLit expr and not nil
+		lit, _ := n.(*ast.BasicLit)
+		if lit == nil {
+			return false
+		}
+		if lit.Kind != token.STRING {
+			return false
+		}
+		val, _ := strconv.Unquote(lit.Value)
+		return p(val)
 	})
 }
 
