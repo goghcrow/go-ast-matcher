@@ -144,10 +144,10 @@ func IdentOf(m *Matcher, p Predicate[*ast.Ident]) IdentPattern {
 		return p(ident)
 	})
 }
-func IdentNameEqual(m *Matcher, name string) IdentPattern {
+func IdentNameIs(m *Matcher, name string) IdentPattern {
 	return IdentOf(m, func(id *ast.Ident) bool { return name == id.Name })
 }
-func IdentNameRegex(m *Matcher, reg *regexp.Regexp) IdentPattern {
+func IdentNameMatch(m *Matcher, reg *regexp.Regexp) IdentPattern {
 	return IdentOf(m, func(id *ast.Ident) bool { return reg.Match([]byte(id.Name)) })
 }
 
@@ -237,6 +237,27 @@ func SignatureOf(m *Matcher, p Predicate[*types.Signature]) IdentPattern {
 		}
 		return false
 	})
+}
+
+func InitFunc(m *Matcher) *ast.FuncDecl {
+	// return &ast.FuncDecl{
+	// 	// types.Identical(*types.Signature, *types.Signature) does not compare recv
+	// 	Recv: IsFunction(m),
+	// 	Name: And(m,
+	// 		IdentNameIs(m, "init"),
+	// 		TypeIdentical[IdentPattern](m, types.NewSignatureType(
+	// 			nil, nil, nil, nil, nil, false,
+	// 		)),
+	// 	),
+	// }
+	return &ast.FuncDecl{
+		Name: And(m,
+			IdentNameIs(m, "init"),
+			SignatureOf(m, func(sig *types.Signature) bool {
+				return sig.Recv() == nil && sig.Params() == nil && sig.Results() == nil
+			}),
+		),
+	}
 }
 
 // RecvTypeOf for ast.FuncDecl { Name }

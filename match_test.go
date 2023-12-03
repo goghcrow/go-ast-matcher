@@ -20,7 +20,7 @@ func fatalIf(t *testing.T, err error) {
 }
 
 func basePositionOf(fset *token.FileSet, n ast.Node) string {
-	pos := ShowPos(fset, n)
+	pos := PosOfNode(fset, n)
 	s := fmt.Sprintf("%s:%d:%d", filepath.Base(pos.Filename), pos.Line, pos.Column)
 	if s == ".:0:0" {
 		return ""
@@ -37,7 +37,7 @@ var matchPatterns = map[string]func(m *Matcher) ast.Node{
 		return Bind(m,
 			"var",
 			And(m,
-				IdentNameEqual(m, "id"),
+				IdentNameIs(m, "id"),
 				TypeIdentical[IdentPattern](m, m.MustLookupType("int")),
 			),
 		)
@@ -92,7 +92,7 @@ func TestMatchRun(t *testing.T) {
 				patternName = testName + "/" + patternName
 
 				m := NewMatcher(dir, []string{PatternAll})
-				m.Walk(func(m *Matcher, file *ast.File) {
+				m.VisitAllFiles(func(m *Matcher, file *ast.File) {
 					t.Log(patternName)
 					pattern := matchPatterns[patternName](m)
 					m.MatchNode(pattern, file, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {

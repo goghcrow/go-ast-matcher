@@ -47,50 +47,23 @@ func derefUnder(ty types.Type) types.Type {
 // ↓↓↓↓↓↓↓↓↓↓↓↓ Show ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 func ShowNode(fset *token.FileSet, n ast.Node) string {
-	// first Show Pseudo Node
-	switch n := n.(type) {
-	case MatchFun:
-		return "match-fun"
-	case StmtsNode:
-		xs := make([]string, len(n))
-		for i, it := range n {
-			xs[i] = ShowNode(fset, it)
-		}
-		return strings.Join(xs, "\n")
-	case ExprsNode:
-		xs := make([]string, len(n))
-		for i, it := range n {
-			xs[i] = ShowNode(fset, it)
-		}
-		return strings.Join(xs, "\n")
-	case SpecsNode:
-		xs := make([]string, len(n))
-		for i, it := range n {
-			xs[i] = ShowNode(fset, it)
-		}
-		return strings.Join(xs, "\n")
-	case IdentsNode:
-		xs := make([]string, len(n))
-		for i, it := range n {
-			xs[i] = ShowNode(fset, it)
-		}
-		return strings.Join(xs, "\n")
-	case FieldsNode:
-		xs := make([]string, len(n))
-		for i, it := range n {
-			xs[i] = ShowNode(fset, it)
-		}
-		return strings.Join(xs, "\n")
-	case TokenNode:
-		return token.Token(n).String()
+	if IsPseudoNode(n) {
+		return showPseudoNode(fset, n)
 	}
-
 	var buf bytes.Buffer
 	_ = printer.Fprint(&buf, fset, n)
 	return buf.String()
 }
-func ShowPos(fset *token.FileSet, n ast.Node) token.Position {
+
+func PosOfNode(fset *token.FileSet, n ast.Node) token.Position {
 	return fset.Position(n.Pos())
+}
+
+func LocOfPos(fset *token.FileSet, pos token.Pos) string {
+	if pos == token.NoPos {
+		return ""
+	}
+	return " at " + fset.Position(pos).String()
 }
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓ Node ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
@@ -192,6 +165,23 @@ func FormatFile(fset *token.FileSet, f *ast.File) []byte {
 	err := format.Node(buf, fset, f)
 	panicIfErr(err)
 	return buf.Bytes()
+}
+
+// ↓↓↓↓↓↓↓↓↓↓↓↓ Packages ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+func trimPkgPath(pkg string) string {
+	xs := strings.Split(pkg, " ")
+	if len(xs) > 1 {
+		return strings.Trim(xs[1], `"`)
+	}
+	return strings.Trim(pkg, `"`)
+}
+
+func fmtImport(spec *ast.ImportSpec) string {
+	if spec.Name == nil {
+		return spec.Path.Value
+	}
+	return spec.Name.Name + " " + spec.Path.Value
 }
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓ Others ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓

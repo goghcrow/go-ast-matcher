@@ -22,7 +22,7 @@ var rewriteTests = map[string]struct {
 		pattern: func(m *Matcher) ast.Node {
 			return &ast.CallExpr{
 				Fun: And(m,
-					IdentNameEqual(m, "println"),
+					IdentNameIs(m, "println"),
 					IsBuiltin(m),
 				),
 				Args: MkVar[ExprsPattern](m, "args"),
@@ -72,7 +72,7 @@ func TestRewriteRun(t *testing.T) {
 		}
 
 		m := NewMatcher(dir, []string{PatternAll})
-		m.Walk(func(m *Matcher, file *ast.File) {
+		m.VisitAllFiles(func(m *Matcher, file *ast.File) {
 			name := filepath.Base(m.Filename)
 			t.Run(testFile+"/"+name, func(t *testing.T) {
 				m.MatchNode(testCase.pattern(m), file, testCase.callback)

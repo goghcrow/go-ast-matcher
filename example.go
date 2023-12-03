@@ -61,7 +61,7 @@ func PatternOfAllFuncOrMethodDeclName(m *Matcher) ast.Node {
 func PatternOfFuncOrMethodDeclWithSpecName(name string) func(m *Matcher) ast.Node {
 	return func(m *Matcher) ast.Node {
 		return &ast.FuncDecl{
-			Name: IdentNameEqual(m, name),
+			Name: IdentNameIs(m, name),
 		}
 	}
 }
@@ -100,7 +100,7 @@ func PatternOfAssign(m *Matcher) ast.Node {
 func PatternOfAppendWithNoValue(m *Matcher) ast.Node {
 	return &ast.CallExpr{
 		Fun: And(m,
-			IdentNameEqual(m, "append"),
+			IdentNameIs(m, "append"),
 			IsBuiltin(m),
 		),
 		Args: SliceLenEQ[ExprsPattern](m, 1),
@@ -332,11 +332,11 @@ func GrepGormTablerTableName(dir string) {
 		// 		types.Implements(types.NewPointer(ty), gormTabler)
 		// }),
 		// method name must be TableName
-		// Name: IdentNameEqual(m, "TableName"),
+		// Name: IdentNameIs(m, "TableName"),
 
 		Name: And[IdentPattern](m,
 			// IsMethod(m),
-			IdentNameEqual(m, "TableName"),
+			IdentNameIs(m, "TableName"),
 			RecvTypeOf(m, func(ty types.Type) bool {
 				return types.Implements(ty, gormTabler) ||
 					types.Implements(types.NewPointer(ty), gormTabler)

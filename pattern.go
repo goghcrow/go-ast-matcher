@@ -3,6 +3,7 @@ package astmatcher
 import (
 	"go/ast"
 	"go/token"
+	"strings"
 )
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Pattern ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
@@ -436,6 +437,10 @@ func (m *Matcher) tryGetFieldsMatchFun(xs []*ast.Field) MatchFun {
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Pseudo Node ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
+type PseudoNode interface {
+	MatchFun | StmtsNode | ExprsNode | SpecsNode | IdentsNode | FieldsNode | TokenNode
+}
+
 type (
 	MatchFun   func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool
 	StmtsNode  []ast.Stmt   // for the callback param of StmtsPattern
@@ -464,6 +469,47 @@ func IsPseudoNode(n ast.Node) bool {
 		return true
 	}
 	return false
+}
+
+func showPseudoNode(fset *token.FileSet, n ast.Node) string {
+	switch n := n.(type) {
+	case MatchFun:
+		return "match-fun"
+	case StmtsNode:
+		xs := make([]string, len(n))
+		for i, it := range n {
+			xs[i] = ShowNode(fset, it)
+		}
+		return strings.Join(xs, "\n")
+	case ExprsNode:
+		xs := make([]string, len(n))
+		for i, it := range n {
+			xs[i] = ShowNode(fset, it)
+		}
+		return strings.Join(xs, "\n")
+	case SpecsNode:
+		xs := make([]string, len(n))
+		for i, it := range n {
+			xs[i] = ShowNode(fset, it)
+		}
+		return strings.Join(xs, "\n")
+	case IdentsNode:
+		xs := make([]string, len(n))
+		for i, it := range n {
+			xs[i] = ShowNode(fset, it)
+		}
+		return strings.Join(xs, "\n")
+	case FieldsNode:
+		xs := make([]string, len(n))
+		for i, it := range n {
+			xs[i] = ShowNode(fset, it)
+		}
+		return strings.Join(xs, "\n")
+	case TokenNode:
+		return token.Token(n).String()
+	default:
+		panic("unknown pseudo node")
+	}
 }
 
 func (MatchFun) Pos() token.Pos   { return token.NoPos }
