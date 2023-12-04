@@ -23,6 +23,13 @@ func Wildcard[T Pattern](m *Matcher) T {
 	return MkPattern[T](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool { return true })
 }
 
+// Nil literal represents wildcard[T] for convenient, so a special Nil pattern needed
+func Nil[T Pattern](m *Matcher) T {
+	return MkPattern[T](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		return IsNilNode(n)
+	})
+}
+
 func Bind[T Pattern](m *Matcher, name string, ptn T) T {
 	return And(m, ptn, MkVar[T](m, name))
 }

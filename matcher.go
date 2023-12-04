@@ -677,8 +677,7 @@ func (m *Matcher) matchExpr(x, y ast.Expr, stack []ast.Node, binds Binds) bool {
 		if y == nil {
 			return false
 		}
-		return (x.Type == nil) == (y.Type == nil) &&
-			m.matchExpr(x.Type, y.Type, stack, binds) &&
+		return m.matchExpr(x.Type, y.Type, stack, binds) &&
 			m.matchExprs(x.Elts, y.Elts, stack, binds)
 
 	case *ast.ParenExpr:
@@ -889,6 +888,7 @@ func (m *Matcher) matchStmts(xs, ys []ast.Stmt, stack []ast.Node, binds Binds) b
 }
 
 func (m *Matcher) matchExprs(xs, ys []ast.Expr, stack []ast.Node, binds Binds) bool {
+	// notice: nil is wildcard pattern, but []ast.Expr{} exactly matched empty ys
 	if xs == nil {
 		return true
 	}
