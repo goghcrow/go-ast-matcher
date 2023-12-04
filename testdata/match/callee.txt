@@ -1,0 +1,104 @@
+-- callee.stdout --
+node: append(xs, 1)
+
+node: new(int)
+
+node: f(42)
+
+node: m(A(0))
+
+node: callBuiltin()
+
+node: callVar()
+
+node: a.Method()
+
+node: s.String()
+
+-- builtin_callee.stdout --
+node: append(xs, 1)
+
+node: new(int)
+
+-- var_callee.stdout --
+node: f(42)
+
+node: m(A(0))
+
+-- funcOrMethod_callee.stdout --
+node: callBuiltin()
+
+node: callVar()
+
+node: a.Method()
+
+node: s.String()
+
+-- func_callee.stdout --
+node: callBuiltin()
+
+node: callVar()
+
+-- method_callee.stdout --
+node: a.Method()
+
+node: s.String()
+
+-- static_callee.stdout --
+node: callBuiltin()
+
+node: callVar()
+
+node: a.Method()
+
+-- iface_calleeOf.stdout --
+node: s.String()
+
+
+
+
+-- a.go --
+package match
+
+func callBuiltin() {
+	var xs []int
+	xs = append(xs, 1)
+
+	_ = new(int)
+}
+
+func callVar() {
+	f := println
+	f(42)
+
+	m := A.Method
+	m(A(0))
+}
+
+func callFunc() {
+    callBuiltin()
+    callVar()
+}
+
+func callMethod() {
+	a := A(0) // not call
+	a.Method()
+}
+
+func callIfaceMethod(s Show) {
+	s.String()
+}
+
+type A int
+
+func (a A) Method() {}
+
+type Show interface {
+	String() string
+}
+
+type S string
+
+func (s S) String() string {
+	return string(s)
+}

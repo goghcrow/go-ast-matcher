@@ -1,0 +1,13 @@
+-- composite_lit.stdout --
+node: {}
+
+-- a.go --
+package main
+
+type A struct {}
+
+func main() {
+	_ = []A{
+        {},
+	}
+}

@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
+
+	"golang.org/x/tools/go/types/typeutil"
 )
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Combinators ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
@@ -151,9 +153,11 @@ func IdentOf(m *Matcher, p Predicate[*ast.Ident]) IdentPattern {
 		return p(ident)
 	})
 }
+
 func IdentNameIs(m *Matcher, name string) IdentPattern {
 	return IdentOf(m, func(id *ast.Ident) bool { return name == id.Name })
 }
+
 func IdentNameMatch(m *Matcher, reg *regexp.Regexp) IdentPattern {
 	return IdentOf(m, func(id *ast.Ident) bool { return reg.Match([]byte(id.Name)) })
 }
@@ -168,13 +172,6 @@ func ObjectOf(m *Matcher, pred Predicate[types.Object]) IdentPattern {
 			return false
 		}
 		return pred(m.ObjectOf(id))
-	})
-}
-
-func IsBuiltin(m *Matcher) IdentPattern {
-	return ObjectOf(m, func(obj types.Object) bool {
-		_, ok := obj.(*types.Builtin)
-		return ok
 	})
 }
 
@@ -224,115 +221,6 @@ func TypeImplements[T TypingPattern](m *Matcher, iface *types.Interface) T {
 	})
 }
 
-// ↓↓↓↓↓↓↓↓↓↓↓↓ Method ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
-
-// IsFunction For ast.FuncDecl Recv
-func IsFunction(m *Matcher) FieldListPattern {
-	return MkPattern[FieldListPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
-		return IsNilNode(n)
-	})
-}
-
-func IsMethod(m *Matcher) FieldListPattern {
-	return Not[FieldListPattern](m, IsFunction(m))
-}
-
-func SignatureOf(m *Matcher, p Predicate[*types.Signature]) IdentPattern {
-	return TypeOf[IdentPattern](m, func(t types.Type) bool {
-		if sig, ok := t.(*types.Signature); ok {
-			return p(sig)
-		}
-		return false
-	})
-}
-
-func InitFunc(m *Matcher) *ast.FuncDecl {
-	// return &ast.FuncDecl{
-	// 	// types.Identical(*types.Signature, *types.Signature) does not compare recv
-	// 	Recv: IsFunction(m),
-	// 	Name: And(m,
-	// 		IdentNameIs(m, "init"),
-	// 		TypeIdentical[IdentPattern](m, types.NewSignatureType(
-	// 			nil, nil, nil, nil, nil, false,
-	// 		)),
-	// 	),
-	// }
-	return &ast.FuncDecl{
-		Name: And(m,
-			IdentNameIs(m, "init"),
-			SignatureOf(m, func(sig *types.Signature) bool {
-				return sig.Recv() == nil && sig.Params() == nil && sig.Results() == nil
-			}),
-		),
-	}
-}
-
-// RecvTypeOf for ast.FuncDecl { Name }
-func RecvTypeOf(m *Matcher, p Predicate[types.Type]) IdentPattern {
-	return SignatureOf(m, func(sig *types.Signature) bool {
-		if sig.Recv() == nil {
-			return false
-		}
-		return p(sig.Recv().Type())
-	})
-}
-
-// RecvOf for ast.FuncDecl { Recv }
-func RecvOf(m *Matcher, f func(recv *ast.Field) bool) FieldListPattern {
-	return MkPattern[FieldListPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
-		if n == nil /*ast.Node(nil)*/ {
-			return false
-		}
-		lst := n.(*ast.FieldList)
-		if lst == nil {
-			return false
-		}
-		if lst.NumFields() != 1 {
-			return false
-		}
-		return f(lst.List[0])
-	})
-}
-
-// ↓↓↓↓↓↓↓↓↓↓↓↓ Selector ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
-
-func SelectorOfPkgPath(m *Matcher, path string, reg *regexp.Regexp) *ast.SelectorExpr {
-	return SelectorOfPkg(m, func(pkg *types.Package) bool {
-		return pkg.Path() == path
-	}, func(ident *ast.Ident) bool {
-		return reg.MatchString(ident.Name)
-	})
-}
-
-func SelectorOfPkg(m *Matcher, pPkg Predicate[*types.Package], pId Predicate[*ast.Ident]) *ast.SelectorExpr {
-	return &ast.SelectorExpr{
-		X: IdentOf(m, func(id *ast.Ident) bool {
-			pkg, ok := m.Uses[id].(*types.PkgName)
-			return ok && pPkg(pkg.Imported())
-		}),
-		Sel: IdentOf(m, pId),
-	}
-}
-
-func SelectorOfStructField(m *Matcher, pStruct Predicate[*types.Struct], pField Predicate[*types.Var]) ExprPattern {
-	// must be struct field selector
-	return And(m,
-		PatternOf[ExprPattern](m, &ast.SelectorExpr{
-			X: TypeOf[ExprPattern](m, func(ty types.Type) bool {
-				assert(ty != nil, "invalid")
-				ts, ok := ty.Underlying().(*types.Struct)
-				return ok && pStruct(ts)
-			}),
-		}),
-		MkPattern[ExprPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
-			sel, _ := n.(*ast.SelectorExpr) // has confirmed
-			assert(sel != nil && m.Selections[sel] != nil, "invalid")
-			tv, ok := m.Selections[sel].Obj().(*types.Var)
-			return ok && tv.IsField() && pField(tv)
-		}),
-	)
-}
-
 // ↓↓↓↓↓↓↓↓↓↓↓↓ BasicLit ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 func BasicLitOfKind(m *Matcher, kind token.Token) ExprPattern {
@@ -379,6 +267,207 @@ func TagOf(m *Matcher, p Predicate[*reflect.StructTag]) BasicLitPattern {
 		structTag := reflect.StructTag(tag)
 		return p(&structTag)
 	})
+}
+
+// ↓↓↓↓↓↓↓↓↓↓↓↓ Callee ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+// ref testdata/match/callee.txt
+
+// CalleeOf a builtin / function / method / var call
+func CalleeOf(m *Matcher, p Predicate[types.Object]) CallExprPattern {
+	return MkPattern[CallExprPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		if n == nil /*ast.Node(nil)*/ {
+			return false
+		}
+		call := n.(*ast.CallExpr)
+		if call == nil {
+			return false
+		}
+		return p(typeutil.Callee(m.Info, call))
+	})
+}
+
+// BuiltinCalleeOf a builtin function call
+func BuiltinCalleeOf(m *Matcher, p Predicate[*types.Builtin]) CallExprPattern {
+	return CalleeOf(m, func(callee types.Object) bool {
+		if f, ok := callee.(*types.Builtin); ok {
+			return p(f)
+		}
+		return false
+	})
+}
+
+// VarCalleeOf a var call
+func VarCalleeOf(m *Matcher, p Predicate[*types.Var]) CallExprPattern {
+	return CalleeOf(m, func(callee types.Object) bool {
+		if f, ok := callee.(*types.Var); ok {
+			return p(f)
+		}
+		return false
+	})
+}
+
+// FuncOrMethodCalleeOf a function or method call, exclude builtin and var call
+func FuncOrMethodCalleeOf(m *Matcher, p Predicate[*types.Func]) CallExprPattern {
+	return CalleeOf(m, func(callee types.Object) bool {
+		if f, ok := callee.(*types.Func); ok {
+			return p(f)
+		}
+		return false
+	})
+}
+
+func FuncCalleeOf(m *Matcher, p Predicate[*types.Func]) CallExprPattern {
+	return CalleeOf(m, func(callee types.Object) bool {
+		if f, ok := callee.(*types.Func); ok {
+			recv := f.Type().(*types.Signature).Recv()
+			return recv == nil && p(f)
+		}
+		return false
+	})
+}
+
+func MethodCalleeOf(m *Matcher, p Predicate[*types.Func]) CallExprPattern {
+	return CalleeOf(m, func(callee types.Object) bool {
+		if f, ok := callee.(*types.Func); ok {
+			recv := f.Type().(*types.Signature).Recv()
+			return recv != nil && p(f)
+		}
+		return false
+	})
+}
+
+// StaticCalleeOf a static function (or method) call, exclude var / builtin call
+func StaticCalleeOf(m *Matcher, p Predicate[*types.Func]) CallExprPattern {
+	return FuncOrMethodCalleeOf(m, func(f *types.Func) bool {
+		recv := f.Type().(*types.Signature).Recv()
+		isIfaceRecv := recv != nil && types.IsInterface(recv.Type())
+		return !isIfaceRecv && p(f)
+	})
+}
+
+func IfaceCalleeOf(m *Matcher, p Predicate[*types.Func]) CallExprPattern {
+	return MethodCalleeOf(m, func(f *types.Func) bool {
+		recv := f.Type().(*types.Signature).Recv()
+		return types.IsInterface(recv.Type()) && p(f)
+	})
+}
+
+// ↓↓↓↓↓↓↓↓↓↓↓↓ Recv ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+// IsFuncRecv For ast.FuncDecl Recv
+func IsFuncRecv(m *Matcher) FieldListPattern {
+	return MkPattern[FieldListPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		return IsNilNode(n)
+	})
+}
+
+func IsMethodRecv(m *Matcher) FieldListPattern {
+	return Not[FieldListPattern](m, IsFuncRecv(m))
+}
+
+func SignatureOf(m *Matcher, p Predicate[*types.Signature]) IdentPattern {
+	return TypeOf[IdentPattern](m, func(t types.Type) bool {
+		if sig, ok := t.(*types.Signature); ok {
+			return p(sig)
+		}
+		return false
+	})
+}
+
+// RecvTypeOf for ast.FuncDecl { Name }
+func RecvTypeOf(m *Matcher, p Predicate[types.Type]) IdentPattern {
+	return SignatureOf(m, func(sig *types.Signature) bool {
+		if sig.Recv() == nil {
+			return false
+		}
+		return p(sig.Recv().Type())
+	})
+}
+
+// RecvOf for ast.FuncDecl { Recv }
+func RecvOf(m *Matcher, f func(recv *ast.Field) bool) FieldListPattern {
+	return MkPattern[FieldListPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		if n == nil /*ast.Node(nil)*/ {
+			return false
+		}
+		lst := n.(*ast.FieldList)
+		if lst == nil {
+			return false
+		}
+		if lst.NumFields() != 1 {
+			return false
+		}
+		return f(lst.List[0])
+	})
+}
+
+// ↓↓↓↓↓↓↓↓↓↓↓↓ Builtin & Init  ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+func IsBuiltin(m *Matcher) IdentPattern {
+	return ObjectOf(m, func(obj types.Object) bool {
+		_, ok := obj.(*types.Builtin)
+		return ok
+	})
+}
+
+func InitFunc(m *Matcher) *ast.FuncDecl {
+	// return &ast.FuncDecl{
+	// 	// types.Identical(*types.Signature, *types.Signature) does not compare recv
+	// 	Recv: IsFuncRecv(m),
+	// 	Name: And(m,
+	// 		IdentNameIs(m, "init"),
+	// 		TypeIdentical[IdentPattern](m, types.NewSignatureType(
+	// 			nil, nil, nil, nil, nil, false,
+	// 		)),
+	// 	),
+	// }
+	return &ast.FuncDecl{
+		Name: And(m,
+			IdentNameIs(m, "init"),
+			SignatureOf(m, func(sig *types.Signature) bool {
+				return sig.Recv() == nil && sig.Params() == nil && sig.Results() == nil
+			}),
+		),
+	}
+}
+
+// ↓↓↓↓↓↓↓↓↓↓↓↓ Selector ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+func SelectorOfPkgPath(m *Matcher, path string, reg *regexp.Regexp) *ast.SelectorExpr {
+	return SelectorOfPkg(m, func(pkg *types.Package) bool {
+		return pkg.Path() == path
+	}, func(ident *ast.Ident) bool {
+		return reg.MatchString(ident.Name)
+	})
+}
+
+func SelectorOfPkg(m *Matcher, pPkg Predicate[*types.Package], pId Predicate[*ast.Ident]) *ast.SelectorExpr {
+	return &ast.SelectorExpr{
+		X: IdentOf(m, func(id *ast.Ident) bool {
+			pkg, ok := m.Uses[id].(*types.PkgName)
+			return ok && pPkg(pkg.Imported())
+		}),
+		Sel: IdentOf(m, pId),
+	}
+}
+
+func SelectorOfStructField(m *Matcher, pStruct Predicate[*types.Struct], pField Predicate[*types.Var]) ExprPattern {
+	// must be struct field selector
+	return And(m,
+		PatternOf[ExprPattern](m, &ast.SelectorExpr{
+			X: TypeOf[ExprPattern](m, func(ty types.Type) bool {
+				assert(ty != nil, "invalid")
+				ts, ok := ty.Underlying().(*types.Struct)
+				return ok && pStruct(ts)
+			}),
+		}),
+		MkPattern[ExprPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+			sel, _ := n.(*ast.SelectorExpr) // has confirmed
+			assert(sel != nil && m.Selections[sel] != nil, "invalid")
+			tv, ok := m.Selections[sel].Obj().(*types.Var)
+			return ok && tv.IsField() && pField(tv)
+		}),
+	)
 }
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓ Unary ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓

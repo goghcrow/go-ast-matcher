@@ -53,6 +53,15 @@ var matchPatterns = map[string]func(m *Matcher) ast.Node{
 	"atomic/swap_struct_field":    PatternOfAtomicSwapStructField,
 	"basiclit/import":             PatternOfAllImportSpec,
 	"basiclit/tag":                PatternOfStructFieldWithJsonTag,
+	"nil/composite_lit":           PatternOfLitVal,
+	"callee/callee":               PatternOfCallee,
+	"callee/builtin_callee":       PatternOfBuiltinCallee,
+	"callee/var_callee":           PatternOfVarCallee,
+	"callee/funcOrMethod_callee":  PatternOfFuncOrMethodCallee,
+	"callee/func_callee":          PatternOfFuncCallee,
+	"callee/method_callee":        PatternOfMethodCallee,
+	"callee/static_callee":        PatternOfStaticCallee,
+	"callee/iface_calleeOf":       PatternOfIfaceCalleeOf,
 }
 
 func TestMatchRun(t *testing.T) {
@@ -87,9 +96,9 @@ func TestMatchRun(t *testing.T) {
 
 		// baseName := strings.TrimSpace(string(ar.Comment))
 		for patternName, wantStdout := range arFiles {
-			t.Run(filepath.Base(testFile), func(t *testing.T) {
+			patternName = testName + "/" + patternName
+			t.Run(patternName, func(t *testing.T) {
 				stdout := ""
-				patternName = testName + "/" + patternName
 
 				m := NewMatcher(dir, []string{PatternAll})
 				m.VisitAllFiles(func(m *Matcher, file *ast.File) {

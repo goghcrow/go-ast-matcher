@@ -21,6 +21,14 @@ func PatternOfWildcardIdent(m *Matcher) ast.Node {
 	)
 }
 
+func PatternOfLitVal(m *Matcher) ast.Node {
+	return &ast.CompositeLit{
+		// Type: nil,
+		// nil value is wildcard, so Nil Pattern is needed to represent exactly nil type expr
+		Type: Nil[ExprPattern](m),
+	}
+}
+
 func PatternOfVarDecl(m *Matcher) ast.Node {
 	return &ast.GenDecl{
 		Tok: token.VAR, // IMPORT, CONST, TYPE, or VAR
@@ -43,6 +51,47 @@ func PatternOfValSpec(m *Matcher) ast.Node {
 		Names: MkVar[IdentsPattern](m, "var"),
 		Type:  TypeIdentical[ExprPattern](m, m.MustLookupType("int")),
 	}
+}
+
+func PatternOfCallee(m *Matcher) ast.Node {
+	return CalleeOf(m, func(f types.Object) bool {
+		return f != nil
+	})
+}
+func PatternOfBuiltinCallee(m *Matcher) ast.Node {
+	return BuiltinCalleeOf(m, func(f *types.Builtin) bool {
+		return f != nil
+	})
+}
+func PatternOfVarCallee(m *Matcher) ast.Node {
+	return VarCalleeOf(m, func(f *types.Var) bool {
+		return f != nil
+	})
+}
+func PatternOfFuncOrMethodCallee(m *Matcher) ast.Node {
+	return FuncOrMethodCalleeOf(m, func(f *types.Func) bool {
+		return f != nil
+	})
+}
+func PatternOfFuncCallee(m *Matcher) ast.Node {
+	return FuncCalleeOf(m, func(f *types.Func) bool {
+		return f != nil
+	})
+}
+func PatternOfMethodCallee(m *Matcher) ast.Node {
+	return MethodCalleeOf(m, func(f *types.Func) bool {
+		return f != nil
+	})
+}
+func PatternOfStaticCallee(m *Matcher) ast.Node {
+	return StaticCalleeOf(m, func(f *types.Func) bool {
+		return f != nil
+	})
+}
+func PatternOfIfaceCalleeOf(m *Matcher) ast.Node {
+	return IfaceCalleeOf(m, func(f *types.Func) bool {
+		return f != nil
+	})
 }
 
 func PatternOfAllImportSpec(m *Matcher) ast.Node {
@@ -182,7 +231,7 @@ func PatternOfFuncDeclHasAnyParamNode(m *Matcher, param *ast.Field) *ast.FuncDec
 
 func PatternOfMethodHasAnyParam(m *Matcher, param *ast.Field) *ast.FuncDecl {
 	return &ast.FuncDecl{
-		Recv: IsMethod(m),
+		Recv: IsMethodRecv(m),
 		Type: &ast.FuncType{
 			Params: &ast.FieldList{
 				List: Contains[FieldsPattern](m, param),
