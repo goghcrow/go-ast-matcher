@@ -1,4 +1,4 @@
-package astmatcher
+package matcher
 
 import (
 	"fmt"
@@ -240,6 +240,30 @@ func PatternOfMethodHasAnyParam(m *Matcher, param *ast.Field) *ast.FuncDecl {
 	}
 }
 
+// ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Gorm ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+func PatternOfNonCompositeModelCall(m *Matcher) func() ast.Node {
+	gormDB := types.NewPointer(m.MustLookupType("gorm.io/gorm.DB"))
+	return func() ast.Node {
+		// db.Model(&Model{})
+		// db.Model(Model{})
+		return &ast.CallExpr{
+			Fun: &ast.SelectorExpr{
+				X:   TypeAssignableTo[ExprPattern](m, gormDB),
+				Sel: IdentNameIs(m, "Model"),
+			},
+			Args: []ast.Expr{
+				Not(m,
+					Or(m,
+						PatternOf[ExprPattern](m, PtrOf(&ast.CompositeLit{})),
+						PatternOf[ExprPattern](m, &ast.CompositeLit{}),
+					),
+				),
+			},
+		}
+	}
+}
+
 func GrepFuncDeclWithSpecTypeOfParam(dir string, qualifiedType string, opts ...MatchOption) {
 	m := NewMatcher(dir, []string{PatternAll}, opts...)
 
@@ -334,8 +358,8 @@ func GrepDBProxy(dir string) {
 }
 
 func GrepGormTabler(dir string) {
-	// Notice: we want match node by outer type, so WithLoadAll needed
-	m := NewMatcher(dir, []string{PatternAll}, WithLoadAll())
+	// Notice: we want match node by outer type, so WithLoadDepts needed
+	m := NewMatcher(dir, []string{PatternAll}, WithLoadDepts())
 
 	// types.Named -> types.Interface
 	gormTabler := m.MustLookupType("gorm.io/gorm/schema.Tabler").Underlying().(*types.Interface)
@@ -367,8 +391,8 @@ func GrepGormTabler(dir string) {
 }
 
 func GrepGormTablerTableName(dir string) {
-	// Notice: we want match node by outer type, so WithLoadAll needed
-	m := NewMatcher(dir, []string{PatternAll}, WithLoadAll())
+	// Notice: we want match node by outer type, so WithLoadDepts needed
+	m := NewMatcher(dir, []string{PatternAll}, WithLoadDepts())
 
 	// types.Named -> types.Interface
 	gormTabler := m.MustLookupType("gorm.io/gorm/schema.Tabler").Underlying().(*types.Interface)
@@ -481,11 +505,11 @@ func GrepGormChainAPI(dir string, filter func(*Matcher, *ast.FuncDecl) bool, opt
 		}
 	)
 
-	// Notice: we want match node by outer type, so WithLoadAll needed
+	// Notice: we want match node by outer type, so WithLoadDepts needed
 	m := NewMatcher(
 		dir,
 		[]string{PatternAll},
-		append(opts, WithLoadAll())...,
+		append(opts, WithLoadDepts())...,
 	)
 
 	pattern := &ast.CallExpr{

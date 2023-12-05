@@ -1,4 +1,4 @@
-package astmatcher
+package matcher
 
 import (
 	"bytes"

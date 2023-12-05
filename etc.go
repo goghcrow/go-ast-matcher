@@ -1,20 +1,18 @@
-package astmatcher
+package matcher
 
 import (
 	"bytes"
 	"fmt"
 	"go/ast"
-	"go/format"
 	"go/printer"
 	"go/token"
 	"go/types"
 	"os"
-	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"golang.org/x/tools/go/ast/astutil"
-	"golang.org/x/tools/go/packages"
 )
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓ Type ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
@@ -66,7 +64,7 @@ func LocOfPos(fset *token.FileSet, pos token.Pos) string {
 	return " at " + fset.Position(pos).String()
 }
 
-// ↓↓↓↓↓↓↓↓↓↓↓↓ Node ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+// ↓↓↓↓↓↓↓↓↓↓↓↓ Is ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 // IsNilNode for typed-nil problem
 func IsNilNode(n ast.Node) bool {
@@ -89,102 +87,54 @@ func IsNode[T ast.Node](n ast.Node) bool {
 	return ok
 }
 
-// ↓↓↓↓↓↓↓↓↓↓↓↓ Loader ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
-
-const (
-	PatternAll = "./..."
-	PatternStd = "std"
-
-	IncludeTests = true
-
-	// LoadDepts load all dependencies
-	LoadDepts = packages.NeedImports | packages.NeedDeps
-	LoadMode  = packages.NeedTypesInfo |
-		packages.NeedName |
-		packages.NeedFiles |
-		packages.NeedExportFile |
-		packages.NeedCompiledGoFiles |
-		packages.NeedTypes |
-		packages.NeedSyntax |
-		packages.NeedTypesInfo |
-		packages.NeedModule
-)
-
-func LoadDir(dir string, patterns []string, loadAll bool) (
-	*token.FileSet,
-	[]*packages.Package,
-	map[string]*packages.Package,
-) {
-	mode := LoadMode
-	if loadAll {
-		mode |= LoadDepts
+func IsNilType(ty types.Type) bool {
+	if ty == nil {
+		return true
 	}
-
-	dir, err := filepath.Abs(dir)
-	panicIfErr(err)
-
-	fset := token.NewFileSet()
-	init, err := packages.Load(&packages.Config{
-		Fset:  fset,
-		Mode:  mode,
-		Tests: IncludeTests,
-		Dir:   dir,
-	}, patterns...)
-	panicIfErr(err)
-
-	if len(init) == 0 {
-		errLog("no packages found")
+	if v := reflect.ValueOf(ty); v.Kind() == reflect.Ptr && v.IsNil() {
+		return true
 	}
-
-	all := map[PackageID]*packages.Package{}
-	packages.Visit(init, nil, func(pkg *packages.Package) {
-		all[pkg.ID] = pkg
-		for _, err := range pkg.Errors {
-			errLog(err)
-		}
-	})
-
-	return fset, init, all
+	return false
 }
 
-// ↓↓↓↓↓↓↓↓↓↓↓↓ Format ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+// ↓↓↓↓↓↓↓↓↓↓↓↓ Package ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
-func WriteFile(fset *token.FileSet, filename string, f *ast.File) {
-	fh, err := os.Create(filename)
-	panicIfErr(err)
-	defer func() {
-		err = fh.Close()
-		panicIfErr(err)
-	}()
-	err = format.Node(fh, fset, f)
-	panicIfErr(err)
-}
-
-func FormatFile(fset *token.FileSet, f *ast.File) []byte {
-	buf := new(bytes.Buffer)
-	err := format.Node(buf, fset, f)
-	panicIfErr(err)
-	return buf.Bytes()
-}
-
-// ↓↓↓↓↓↓↓↓↓↓↓↓ Packages ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+// func trimPkgPath(pkg string) string {
+// 	xs := strings.Split(pkg, " ")
+// 	if len(xs) > 1 {
+// 		return strings.Trim(xs[1], `"`)
+// 	}
+// 	return strings.Trim(pkg, `"`)
+// }
 
 func trimPkgPath(pkg string) string {
+	pkg, _ = strconv.Unquote(pkg)
 	xs := strings.Split(pkg, " ")
 	if len(xs) > 1 {
-		return strings.Trim(xs[1], `"`)
+		return xs[1]
 	}
-	return strings.Trim(pkg, `"`)
+	return pkg
 }
 
-func fmtImport(spec *ast.ImportSpec) string {
-	if spec.Name == nil {
-		return spec.Path.Value
+// ↓↓↓↓↓↓↓↓↓↓↓↓ BuildTag ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+func parseBuildTag(f *ast.File) string {
+	startWith := strings.HasPrefix
+	trimLeft := strings.TrimPrefix
+	for _, g := range f.Comments {
+		for _, c := range g.List {
+			if startWith(c.Text, "//go:build") ||
+				startWith(c.Text, "//+build") {
+				return strings.TrimSpace(
+					trimLeft(trimLeft(c.Text, "//go:build"), "//+build"),
+				)
+			}
+		}
 	}
-	return spec.Name.Name + " " + spec.Path.Value
+	return ""
 }
 
-// ↓↓↓↓↓↓↓↓↓↓↓↓ Others ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+// ↓↓↓↓↓↓↓↓↓↓↓↓ Other ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 func preOrder(root ast.Node, f astutil.ApplyFunc) {
 	astutil.Apply(root, f, nil)

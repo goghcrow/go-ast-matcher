@@ -1,4 +1,4 @@
-package astmatcher
+package matcher
 
 import (
 	"go/ast"
@@ -13,7 +13,6 @@ import (
 )
 
 type (
-	PackageID  = string
 	PatternVar = string
 	Binds      map[PatternVar]ast.Node
 )
@@ -21,17 +20,24 @@ type (
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ MatchOption ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 type MatchFlags struct {
-	loadAll           bool
+	LoadFlags
+
 	unparenExpr       bool
 	matchCallEllipsis bool
 	pkgFilter         func(pkg *packages.Package) bool
 	fileFilter        func(filename string, file *ast.File) bool
+	genFilter         func(filename string, gen GeneratedBy, file *ast.File) bool
 }
 
 type MatchOption func(*MatchFlags)
 
-// WithLoadAll is slowly, but you can match external types
-func WithLoadAll() MatchOption     { return func(opts *MatchFlags) { opts.loadAll = true } }
+// WithLoadDepts is slowly, but you can match external types
+func WithLoadDepts() MatchOption { return func(opts *MatchFlags) { opts.loadDepts = true } }
+
+// WithBuildTag comma-separated list of extra build tags (see: go help buildconstraint)
+func WithBuildTag(tag string) MatchOption { return func(opts *MatchFlags) { opts.buildTag = tag } }
+func WithLoadTest() MatchOption           { return func(opts *MatchFlags) { opts.test = true } }
+
 func WithUnparenExpr() MatchOption { return func(opts *MatchFlags) { opts.unparenExpr = true } }
 func WithCallEllipsisMatch() MatchOption {
 	return func(opts *MatchFlags) { opts.matchCallEllipsis = true }
@@ -42,16 +48,23 @@ func WithPkgFilter(f func(pkg *packages.Package) bool) MatchOption {
 func WithFileFilter(f func(filename string, file *ast.File) bool) MatchOption {
 	return func(opts *MatchFlags) { opts.fileFilter = f }
 }
+func WithGenFilter(f func(filename string, gen GeneratedBy, file *ast.File) bool) MatchOption {
+	return func(opts *MatchFlags) { opts.genFilter = f }
+}
+func WithSkipGenerated() MatchOption {
+	return func(opts *MatchFlags) {
+		opts.genFilter = func(filename string, gen GeneratedBy, file *ast.File) bool {
+			return false
+		}
+	}
+}
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Matcher ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 type Matcher struct {
 	*MatchFlags
 
-	// global
-	FSet *token.FileSet
-	Init []*packages.Package
-	All  map[PackageID]*packages.Package
+	*Loader
 
 	// current package
 	Pkg *packages.Package
@@ -84,14 +97,9 @@ func NewMatcher(
 	for _, opt := range opts {
 		opt(flags)
 	}
-
-	fset, init, all := LoadDir(dir, patterns, flags.loadAll)
-	return &Matcher{
-		FSet:       fset,
-		Init:       init,
-		All:        all,
-		MatchFlags: flags,
-	}
+	m := &Matcher{Loader: NewLoader(), MatchFlags: flags}
+	m.Load(dir, patterns, flags.LoadFlags)
+	return m
 }
 
 func (m *Matcher) setPkg(pkg *packages.Package) {
@@ -132,6 +140,12 @@ func (m *Matcher) VisitAllPackages(
 		for i, filename := range pkg.CompiledGoFiles {
 			file := pkg.Syntax[i]
 			m.setFile(filename, pkg.Syntax[i])
+
+			genBy := m.Generated[filename]
+			if genBy != "" && m.genFilter != nil && !m.genFilter(filename, genBy, file) {
+				continue
+			}
+
 			if m.fileFilter == nil || m.fileFilter(filename, file) {
 				for _, decl := range file.Decls {
 					d, ok := decl.(*ast.GenDecl)
@@ -193,6 +207,19 @@ func (m *Matcher) Match(pattern ast.Node, f Callback) {
 // Postorder also has type problems, and may need to be handled with a working-list
 type Callback func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds)
 
+func (m *Matcher) MatchNode(pattern, node ast.Node, f Callback) {
+	buildStack := m.mkStackBuilder(node)
+	postOrder(node, func(c *astutil.Cursor) bool {
+		n := c.Node()
+		stack := buildStack(n)
+		binds := map[PatternVar]ast.Node{}
+		if m.match(pattern, n, stack, binds) {
+			f(m, c, stack, binds)
+		}
+		return true
+	})
+}
+
 type stackBuilder func(node ast.Node) []ast.Node
 
 // when any subtree of rootNode matched pattern, return immediately
@@ -208,19 +235,6 @@ func (m *Matcher) matched(pattern, rootNode ast.Node) (matched bool) {
 		panic(abort)
 	})
 	return matched
-}
-
-func (m *Matcher) MatchNode(pattern, node ast.Node, f Callback) {
-	buildStack := m.mkStackBuilder(node)
-	postOrder(node, func(c *astutil.Cursor) bool {
-		n := c.Node()
-		stack := buildStack(n)
-		binds := map[PatternVar]ast.Node{}
-		if m.match(pattern, n, stack, binds) {
-			f(m, c, stack, binds)
-		}
-		return true
-	})
 }
 
 func (m *Matcher) mkStackBuilder(root ast.Node) stackBuilder {
@@ -961,7 +975,7 @@ func (m *Matcher) WriteFile(filename string, f *ast.File) {
 }
 
 func (m *Matcher) FormatFile(f *ast.File) string {
-	return string(FormatFile(m.FSet, f))
+	return string(FmtFile(m.FSet, f))
 }
 
 func (m *Matcher) MustLookupType(qualified string) types.Type {
