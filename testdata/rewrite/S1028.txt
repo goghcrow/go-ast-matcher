@@ -1,0 +1,45 @@
+-- a.go --
+package a
+
+import (
+    "fmt"
+    "errors"
+)
+
+type s struct{}
+
+func (s) New(text string)                        {}
+func (s) Sprintf(format string, a ...any) string { return "" }
+
+func X() {
+	errors := s{}
+	fmt := s{}
+	errors.New(fmt.Sprintf("%s", "a"))
+}
+
+func Y() {
+	errors.New(fmt.Sprintf("%s", "a"))
+}
+
+-- a.go.stdout --
+package a
+
+import (
+	"errors"
+	"fmt"
+)
+
+type s struct{}
+
+func (s) New(text string)                        {}
+func (s) Sprintf(format string, a ...any) string { return "" }
+
+func X() {
+	errors := s{}
+	fmt := s{}
+	errors.New(fmt.Sprintf("%s", "a"))
+}
+
+func Y() {
+	fmt.Errorf("%s", "a")
+}

@@ -15,7 +15,7 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// ↓↓↓↓↓↓↓↓↓↓↓↓ Format ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+// ↓↓↓↓↓↓↓↓↓↓↓↓ format ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 // WriteFile and sort imports if necessary
 func WriteFile(fset *token.FileSet, filename string, f *ast.File) {
@@ -47,10 +47,12 @@ func WriteFileRaw(output io.Writer, file *ast.File) {
 
 const normalizeNumbers = 1 << 30
 
+// ↓↓↓↓↓↓↓↓↓↓↓↓ sort import block ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
 func SortImports(
+	file *ast.File,
 	projectPkgPrefix string,
 	companyPkgPrefix []string,
-	file *ast.File,
 ) {
 	for _, decl := range file.Decls {
 		d, ok := decl.(*ast.GenDecl)
@@ -61,13 +63,21 @@ func SortImports(
 		if !d.Lparen.IsValid() {
 			continue
 		}
-		d.Specs = importBlock(d.Specs).sort(d.Tok)
+
+		i := &imports{
+			decl:             d,
+			projectPkgPrefix: projectPkgPrefix,
+			companyPkgPrefix: companyPkgPrefix,
+		}
+		i.collect()
+		i.sort()
+		i.rebuild()
 	}
 }
 
-// ↓↓↓↓↓↓↓↓↓↓↓↓ Sort Import Block ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
-
 type imports struct {
+	decl *ast.GenDecl
+
 	projectPkgPrefix string
 	companyPkgPrefix []string
 
@@ -77,9 +87,8 @@ type imports struct {
 	project []string
 }
 
-func importBlock(specs []ast.Spec) *imports {
-	i := &imports{}
-	for _, spec := range specs {
+func (i *imports) collect() {
+	for _, spec := range i.decl.Specs {
 		iSpec := spec.(*ast.ImportSpec)
 		pkg := trimPkgPath(iSpec.Path.Value)
 		decl := i.fmtImport(iSpec)
@@ -93,11 +102,13 @@ func importBlock(specs []ast.Spec) *imports {
 			i.other = append(i.other, decl)
 		}
 	}
+}
+
+func (i *imports) sort() {
 	sort.Strings(i.std)
 	sort.Strings(i.other)
 	sort.Strings(i.company)
 	sort.Strings(i.project)
-	return i
 }
 
 func (i *imports) isStd(pkg string) bool     { return stdPkg[pkg] }
@@ -122,21 +133,24 @@ func (i *imports) sorting() [][]string {
 	return [][]string{i.std, i.other, i.company, i.project}
 }
 
-func (i *imports) sort(tok token.Token) (specs []ast.Spec) {
-	sorting := [][]string{i.std, i.other, i.company, i.project}
-	for i, xs := range sorting {
+func (i *imports) rebuild() {
+	var specs []ast.Spec
+
+	sorting := i.sorting()
+	for j, xs := range sorting {
 		for _, v := range xs {
 			specs = append(specs, &ast.ImportSpec{
-				Path: &ast.BasicLit{Value: v, Kind: tok},
+				Path: &ast.BasicLit{Value: v, Kind: i.decl.Tok},
 			})
 		}
-		if len(xs) != 0 && i != len(sorting)-1 {
+		if len(xs) != 0 && j != len(sorting)-1 {
 			specs = append(specs, &ast.ImportSpec{
 				Path: &ast.BasicLit{Value: "", Kind: token.STRING},
 			})
 		}
 	}
-	return
+
+	i.decl.Specs = specs
 }
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓ std Packages ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓

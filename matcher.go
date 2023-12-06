@@ -113,17 +113,53 @@ func (m *Matcher) setFile(filename string, file *ast.File) {
 	m.File = file
 }
 
+func (m *Matcher) visitPkgFiles(pkg *packages.Package, f func(m *Matcher, file *ast.File)) {
+	for i, filename := range pkg.CompiledGoFiles {
+		file := pkg.Syntax[i]
+		m.setFile(filename, file)
+
+		genBy := m.Generated[filename]
+		isGen := genBy != ""
+		hasGenFilter := m.genFilter != nil
+		if isGen && hasGenFilter {
+			if !m.genFilter(filename, genBy, file) {
+				continue
+			}
+		}
+
+		if m.fileFilter == nil || m.fileFilter(filename, m.File) {
+			f(m, m.File)
+		}
+	}
+}
+
+func (m *Matcher) visitPkgImports(
+	pkg *packages.Package,
+	f func(name *ast.Ident, path string),
+) {
+	m.visitPkgFiles(pkg, func(m *Matcher, file *ast.File) {
+		for _, decl := range file.Decls {
+			d, ok := decl.(*ast.GenDecl)
+			if !ok || d.Tok != token.IMPORT {
+				continue
+			}
+			for _, spec := range d.Specs {
+				iSpec := spec.(*ast.ImportSpec)
+				name := iSpec.Name
+				path := trimPkgPath(iSpec.Path.Value)
+				f(name, path)
+			}
+		}
+	})
+	return
+}
+
 // VisitAllFiles Walk all files in all init (defined by load pattern) packages
 func (m *Matcher) VisitAllFiles(f func(m *Matcher, file *ast.File)) {
 	for _, pkg := range m.Init {
 		if m.pkgFilter == nil || m.pkgFilter(pkg) {
 			m.setPkg(pkg)
-			for i, filename := range pkg.CompiledGoFiles {
-				m.setFile(filename, pkg.Syntax[i])
-				if m.fileFilter == nil || m.fileFilter(filename, m.File) {
-					f(m, m.File)
-				}
-			}
+			m.visitPkgFiles(pkg, f)
 		}
 	}
 }
@@ -136,40 +172,6 @@ func (m *Matcher) VisitAllPackages(
 	pre func(*packages.Package) bool,
 	post func(*packages.Package),
 ) {
-	imports := func(pkg *packages.Package) (xs []*packages.Package) {
-		for i, filename := range pkg.CompiledGoFiles {
-			file := pkg.Syntax[i]
-			m.setFile(filename, pkg.Syntax[i])
-
-			genBy := m.Generated[filename]
-			if genBy != "" && m.genFilter != nil && !m.genFilter(filename, genBy, file) {
-				continue
-			}
-
-			if m.fileFilter == nil || m.fileFilter(filename, file) {
-				for _, decl := range file.Decls {
-					d, ok := decl.(*ast.GenDecl)
-					if !ok || d.Tok != token.IMPORT {
-						continue
-					}
-					for _, spec := range d.Specs {
-						iSpec := spec.(*ast.ImportSpec)
-						path := trimPkgPath(iSpec.Path.Value)
-						// assert(pkg.Imports != nil, "NeedImports must be set")
-						// impt := pkg.Imports[path]
-						impt := m.All[path]
-						if impt == nil {
-							// println("skip pkg: " + path) // debug
-						} else {
-							xs = append(xs, impt)
-						}
-					}
-				}
-			}
-		}
-		return
-	}
-
 	seen := map[*packages.Package]bool{}
 	var visit func(*packages.Package)
 	visit = func(pkg *packages.Package) {
@@ -178,9 +180,12 @@ func (m *Matcher) VisitAllPackages(
 		}
 		seen[pkg] = true
 		if pre == nil || pre(pkg) {
-			for _, impt := range imports(pkg) {
-				visit(impt)
-			}
+			m.visitPkgImports(pkg, func(name *ast.Ident, path string) {
+				impt := m.All[path]
+				if impt != nil {
+					visit(impt)
+				}
+			})
 		}
 		if post != nil {
 			post(pkg)
@@ -193,6 +198,8 @@ func (m *Matcher) VisitAllPackages(
 		}
 	}
 }
+
+// ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ node matcher ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 // Match pattern in all packages
 func (m *Matcher) Match(pattern ast.Node, f Callback) {
@@ -956,27 +963,7 @@ func (m *Matcher) matchSpecs(xs, ys []ast.Spec, stack []ast.Node, binds Binds) b
 	return true
 }
 
-// ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ etc ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
-
-func (m *Matcher) ShowPos(n ast.Node) string {
-	return PosOfNode(m.FSet, n).String()
-}
-
-func (m *Matcher) ShowNode(n ast.Node) string {
-	return ShowNode(m.FSet, n)
-}
-
-func (m *Matcher) ShowNodeWithPos(n ast.Node) string {
-	return m.ShowNode(n) + "\nat " + m.ShowPos(n)
-}
-
-func (m *Matcher) WriteFile(filename string, f *ast.File) {
-	WriteFile(m.FSet, filename, f)
-}
-
-func (m *Matcher) FormatFile(f *ast.File) string {
-	return string(FmtFile(m.FSet, f))
-}
+// ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ lookup ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 func (m *Matcher) MustLookupType(qualified string) types.Type {
 	obj := m.Lookup(qualified)
@@ -1015,4 +1002,34 @@ func (m *Matcher) Lookups(name string) []types.Object {
 		}
 	}
 	return ret
+}
+
+// ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ etc ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+func (m *Matcher) ShowPos(n ast.Node) string {
+	return PosOfNode(m.FSet, n).String()
+}
+
+func (m *Matcher) ShowNode(n ast.Node) string {
+	return ShowNode(m.FSet, n)
+}
+
+func (m *Matcher) ShowNodeWithPos(n ast.Node) string {
+	return m.ShowNode(n) + "\nat " + m.ShowPos(n)
+}
+
+func (m *Matcher) WriteFile(filename string, f *ast.File) {
+	WriteFile(m.FSet, filename, f)
+}
+
+func (m *Matcher) FormatFile(f *ast.File) string {
+	return string(FmtFile(m.FSet, f))
+}
+
+func (m *Matcher) SortImports(
+	f *ast.File,
+	projectPkgPrefix string,
+	companyPkgPrefix []string,
+) {
+	SortImports(f, projectPkgPrefix, companyPkgPrefix)
 }

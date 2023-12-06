@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"go/ast"
+	"go/types"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,12 +15,52 @@ import (
 	"golang.org/x/tools/txtar"
 )
 
+//goland:noinspection NonAsciiCharacters
 var rewriteTests = map[string]struct {
-	pattern  func(m *Matcher) ast.Node
-	callback Callback
+	match   func(m *Matcher) ast.Node
+	rewrite Callback
 }{
+	// errors.New(fmt.Sprintf(...)) -> fmt.Errorf(...)
+	"S1028.txt": {
+		match: func(m *Matcher) ast.Node {
+			funCall := FuncCalleeOf(m, func(t *types.Func) bool { return true })
+			errors۰New := &ast.SelectorExpr{
+				X:   &ast.Ident{Name: "errors"},
+				Sel: &ast.Ident{Name: "New"},
+			}
+			fmt۰Sprintf := &ast.SelectorExpr{
+				X:   &ast.Ident{Name: "fmt"},
+				Sel: &ast.Ident{Name: "Sprintf"},
+			}
+			return And(m, funCall,
+				PatternOf[CallExprPattern](m, &ast.CallExpr{
+					Fun: errors۰New,
+					Args: []ast.Expr{
+						And(m, funCall,
+							PatternOf[CallExprPattern](m, &ast.CallExpr{
+								Fun:  fmt۰Sprintf,
+								Args: MkVar[ExprsPattern](m, "args"),
+							}),
+						),
+					},
+				}),
+			)
+		},
+		rewrite: func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
+			// todo: need to optimise imports
+			astutil.AddImport(m.FSet, m.File, "fmt")
+			c.Replace(&ast.CallExpr{
+				Fun: &ast.SelectorExpr{
+					X:   &ast.Ident{Name: "fmt"},
+					Sel: &ast.Ident{Name: "Errorf"},
+				},
+				Args: binds["args"].(ExprsNode),
+			})
+		},
+	},
+	// println -> fmt.Println
 	"println.txt": {
-		pattern: func(m *Matcher) ast.Node {
+		match: func(m *Matcher) ast.Node {
 			return &ast.CallExpr{
 				Fun: And(m,
 					IdentNameIs(m, "println"),
@@ -28,8 +69,8 @@ var rewriteTests = map[string]struct {
 				Args: MkVar[ExprsPattern](m, "args"),
 			}
 		},
-		callback: func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
-			// need to check if fmt has been imported
+		rewrite: func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
+			// todo: need to optimise imports
 			astutil.AddImport(m.FSet, m.File, "fmt")
 			c.Replace(&ast.CallExpr{
 				Fun: &ast.SelectorExpr{
@@ -75,7 +116,7 @@ func TestRewriteRun(t *testing.T) {
 		m.VisitAllFiles(func(m *Matcher, file *ast.File) {
 			name := filepath.Base(m.Filename)
 			t.Run(testFile+"/"+name, func(t *testing.T) {
-				m.MatchNode(testCase.pattern(m), file, testCase.callback)
+				m.MatchNode(testCase.match(m), file, testCase.rewrite)
 				have := m.FormatFile(file)
 				want := wants[name+".stdout"]
 				if strings.TrimSpace(want) != strings.TrimSpace(have) {
@@ -135,7 +176,7 @@ func writeTempFile(data []byte) (string, error) {
 		err = err1
 	}
 	if err != nil {
-		os.Remove(file.Name())
+		_ = os.Remove(file.Name())
 		return "", err
 	}
 	return file.Name(), nil
