@@ -411,7 +411,8 @@ func IfaceCallee(m *Matcher, pkg, iface, method string) CallExprPattern {
 	assert(isFunc, method+" not func")
 
 	return IfaceCalleeOf(m, func(f *types.Func) bool {
-		return methodObj.Type() == f.Type()
+		return f.Name() == method &&
+			f.Type() == methodObj.Type()
 	})
 }
 
