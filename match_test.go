@@ -54,15 +54,27 @@ var matchPatterns = map[string]func(m *Matcher) ast.Node{
 	"basiclit/import":             PatternOfAllImportSpec,
 	"basiclit/tag":                PatternOfStructFieldWithJsonTag,
 	"nil/composite_lit":           PatternOfLitVal,
-	"callee/callee":               PatternOfCallee,
-	"callee/builtin_callee":       PatternOfBuiltinCallee,
-	"callee/var_callee":           PatternOfVarCallee,
-	"callee/funcOrMethod_callee":  PatternOfFuncOrMethodCallee,
-	"callee/func_callee":          PatternOfFuncCallee,
-	"callee/method_callee":        PatternOfMethodCallee,
-	"callee/static_callee":        PatternOfStaticCallee,
-	"callee/iface_calleeOf":       PatternOfIfaceCalleeOf,
+
+	// callback match
+	"callee/callee":              PatternOfCallee,
+	"callee/builtin_callee":      PatternOfBuiltinCallee,
+	"callee/var_callee":          PatternOfVarCallee,
+	"callee/funcOrMethod_callee": PatternOfFuncOrMethodCallee,
+	"callee/func_callee":         PatternOfFuncCallee,
+	"callee/method_callee":       PatternOfMethodCallee,
+	"callee/static_callee":       PatternOfStaticCallee,
+	"callee/iface_callee":        PatternOfIfaceCalleeOf,
+
+	// exactly match
+	"callee/builtin_callee_append":    PatternOfBuiltin_append,
+	"callee/func_callee_callBuiltin":  PatternOfFunc_callBuiltin,
+	"callee/method_callee_A_Method":   PatternOfMethod_A۰Method,
+	"callee/iface_callee_Show_String": PatternOfIface_Show۰String,
 }
+
+const (
+	Module = "github.com/goghcrow/go-ast-matcher/testdata/match"
+)
 
 func TestMatchRun(t *testing.T) {
 	files, err := filepath.Glob("testdata/match/*.txt")
@@ -78,7 +90,7 @@ func TestMatchRun(t *testing.T) {
 		fatalIf(t, err)
 
 		dir := t.TempDir()
-		err = os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module m\n"), 0666)
+		err = os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module "+Module+"\n"), 0666)
 		fatalIf(t, err)
 
 		var arFiles = map[string]txtar.File{}

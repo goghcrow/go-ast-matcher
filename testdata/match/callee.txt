@@ -1,3 +1,18 @@
+-- builtin_callee_append.stdout --
+node: append(xs, 1)
+
+-- func_callee_callBuiltin.stdout --
+node: callBuiltin()
+
+-- method_callee_A_Method.stdout --
+node: a.Method()
+
+-- iface_callee_Show_String.stdout --
+node: s.String()
+
+
+
+
 -- callee.stdout --
 node: append(xs, 1)
 
@@ -51,14 +66,14 @@ node: callVar()
 
 node: a.Method()
 
--- iface_calleeOf.stdout --
+-- iface_callee.stdout --
 node: s.String()
 
 
 
 
 -- a.go --
-package match
+package a
 
 func callBuiltin() {
 	var xs []int

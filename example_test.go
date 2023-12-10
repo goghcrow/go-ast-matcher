@@ -94,6 +94,22 @@ func PatternOfIfaceCalleeOf(m *Matcher) ast.Node {
 	})
 }
 
+// ↓↓↓↓↓↓ exactly callee match ↓↓↓↓↓↓
+func PatternOfBuiltin_append(m *Matcher) ast.Node {
+	return BuiltinCallee(m, "append")
+}
+func PatternOfFunc_callBuiltin(m *Matcher) ast.Node {
+	return FuncCallee(m, Module, "callBuiltin")
+}
+func PatternOfMethod_A۰Method(m *Matcher) ast.Node {
+	return MethodCallee(m, Module, "A", "Method", false)
+}
+func PatternOfIface_Show۰String(m *Matcher) ast.Node {
+	return IfaceCallee(m, Module, "Show", "String")
+}
+
+// ↑↑↑↑↑ exactly callee match ↑↑↑↑↑
+
 func PatternOfAllImportSpec(m *Matcher) ast.Node {
 	return &ast.ImportSpec{
 		// pattern variable, match any and bind to "var"
@@ -243,6 +259,26 @@ func PatternOfMethodHasAnyParam(m *Matcher, param *ast.Field) *ast.FuncDecl {
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Gorm ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 func PatternOfNonCompositeModelCall(m *Matcher) func() ast.Node {
+	return func() ast.Node {
+		// db.Model(&Model{})
+		// db.Model(Model{})
+		return And(m,
+			MethodCallee(m, "gorm.io/gorm", "DB", "Model", true),
+			PatternOf[CallExprPattern](m, &ast.CallExpr{
+				Args: []ast.Expr{
+					Not(m,
+						Or(m,
+							PatternOf[ExprPattern](m, PtrOf(&ast.CompositeLit{})),
+							PatternOf[ExprPattern](m, &ast.CompositeLit{}),
+						),
+					),
+				},
+			}),
+		)
+	}
+}
+
+func PatternOfNonCompositeModelCall_(m *Matcher) func() ast.Node {
 	gormDB := types.NewPointer(m.MustLookupType("gorm.io/gorm.DB"))
 	return func() ast.Node {
 		// db.Model(&Model{})

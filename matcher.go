@@ -266,7 +266,8 @@ func (m *Matcher) mkStackBuilder(root ast.Node) stackBuilder {
 // When y is nil, first call matchFunc, because nil case may need
 // Finally, pattern is not nil, but y is nil, return false
 func (m *Matcher) match(x, y ast.Node, stack []ast.Node, binds Binds) bool {
-	if IsNilNode(x) {
+	isWildcard := IsNilNode(x)
+	if isWildcard {
 		return true
 	}
 
@@ -361,7 +362,8 @@ func (m *Matcher) match(x, y ast.Node, stack []ast.Node, binds Binds) bool {
 }
 
 func (m *Matcher) matchSpec(x, y ast.Spec, stack []ast.Node, binds Binds) bool {
-	if IsNilNode(x) {
+	isWildcard := IsNilNode(x)
+	if isWildcard {
 		return true
 	}
 
@@ -413,7 +415,8 @@ func (m *Matcher) matchSpec(x, y ast.Spec, stack []ast.Node, binds Binds) bool {
 }
 
 func (m *Matcher) matchDecl(x, y ast.Decl, stack []ast.Node, binds Binds) bool {
-	if IsNilNode(x) {
+	isWildcard := IsNilNode(x)
+	if isWildcard {
 		return true
 	}
 
@@ -453,7 +456,8 @@ func (m *Matcher) matchDecl(x, y ast.Decl, stack []ast.Node, binds Binds) bool {
 }
 
 func (m *Matcher) matchStmt(x, y ast.Stmt, stack []ast.Node, binds Binds) bool {
-	if IsNilNode(x) {
+	isWildcard := IsNilNode(x)
+	if isWildcard {
 		return true
 	}
 
@@ -640,7 +644,8 @@ func (m *Matcher) matchStmt(x, y ast.Stmt, stack []ast.Node, binds Binds) bool {
 }
 
 func (m *Matcher) matchExpr(x, y ast.Expr, stack []ast.Node, binds Binds) bool {
-	if IsNilNode(x) {
+	isWildcard := IsNilNode(x)
+	if isWildcard {
 		return true
 	}
 
@@ -853,7 +858,8 @@ func (m *Matcher) matchExpr(x, y ast.Expr, stack []ast.Node, binds Binds) bool {
 }
 
 func (m *Matcher) matchIdent(x, y *ast.Ident, stack []ast.Node, binds Binds) bool {
-	if x == nil {
+	isWildcard := x == nil
+	if isWildcard {
 		return true
 	}
 	if matchFun := m.tryGetIdentMatchFun(x); matchFun != nil {
@@ -866,7 +872,8 @@ func (m *Matcher) matchIdent(x, y *ast.Ident, stack []ast.Node, binds Binds) boo
 }
 
 func (m *Matcher) matchBasicLit(x, y *ast.BasicLit, stack []ast.Node, binds Binds) bool {
-	if x == nil {
+	isWildcard := x == nil
+	if isWildcard {
 		return true
 	}
 	if matchFun := m.tryGetBasicLitMatchFun(x); matchFun != nil {
@@ -891,7 +898,8 @@ func (m *Matcher) matchToken(x, y token.Token, stack []ast.Node, binds Binds) bo
 }
 
 func (m *Matcher) matchStmts(xs, ys []ast.Stmt, stack []ast.Node, binds Binds) bool {
-	if xs == nil {
+	isWildcard := xs == nil
+	if isWildcard {
 		return true
 	}
 	if matchFun := m.tryGetStmtsMatchFun(xs); matchFun != nil {
@@ -910,7 +918,8 @@ func (m *Matcher) matchStmts(xs, ys []ast.Stmt, stack []ast.Node, binds Binds) b
 
 func (m *Matcher) matchExprs(xs, ys []ast.Expr, stack []ast.Node, binds Binds) bool {
 	// notice: nil is wildcard pattern, but []ast.Expr{} exactly matched empty ys
-	if xs == nil {
+	isWildcard := xs == nil
+	if isWildcard {
 		return true
 	}
 	if matchFun := m.tryGetExprsMatchFun(xs); matchFun != nil {
@@ -928,7 +937,8 @@ func (m *Matcher) matchExprs(xs, ys []ast.Expr, stack []ast.Node, binds Binds) b
 }
 
 func (m *Matcher) matchIdents(xs, ys []*ast.Ident, stack []ast.Node, binds Binds) bool {
-	if xs == nil {
+	isWildcard := xs == nil
+	if isWildcard {
 		return true
 	}
 	if matchFun := m.tryGetIdentsMatchFun(xs); matchFun != nil {
@@ -946,7 +956,8 @@ func (m *Matcher) matchIdents(xs, ys []*ast.Ident, stack []ast.Node, binds Binds
 }
 
 func (m *Matcher) matchSpecs(xs, ys []ast.Spec, stack []ast.Node, binds Binds) bool {
-	if xs == nil {
+	isWildcard := xs == nil
+	if isWildcard {
 		return true
 	}
 	if matchFun := m.tryGetSpecsMatchFun(xs); matchFun != nil {

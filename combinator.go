@@ -352,6 +352,71 @@ func IfaceCalleeOf(m *Matcher, p Predicate[*types.Func]) CallExprPattern {
 	})
 }
 
+// ↓↓↓↓↓↓ exactly callee match ↓↓↓↓↓↓
+
+func BuiltinCallee(m *Matcher, fun string) CallExprPattern {
+	builtIn := types.Universe.Lookup(fun)
+	assert(builtIn != nil, fun+" not found")
+
+	return BuiltinCalleeOf(m, func(callee *types.Builtin) bool {
+		return callee.Name() == fun &&
+			callee.Type() == builtIn.Type()
+	})
+}
+
+func FuncCallee(m *Matcher, pkg, fun string) CallExprPattern {
+	qualified := pkg + "." + fun
+	funObj := m.Lookup(qualified)
+	assert(funObj != nil, qualified+" not found")
+
+	_, isFunc := funObj.Type().(*types.Signature)
+	assert(isFunc, qualified+" not func")
+
+	return FuncCalleeOf(m, func(f *types.Func) bool {
+		return f.Name() == fun &&
+			funObj.Type() == f.Type()
+	})
+}
+
+func MethodCallee(m *Matcher, pkg, typ, method string, addressable bool) CallExprPattern {
+	qualified := pkg + "." + typ
+	tyObj := m.Lookup(qualified)
+	assert(tyObj != nil, qualified+" not found")
+
+	methodObj, _, _ := types.LookupFieldOrMethod(tyObj.Type(), addressable, tyObj.Pkg(), method)
+	assert(methodObj != nil, method+" not found")
+
+	_, isFunc := methodObj.Type().(*types.Signature)
+	assert(isFunc, method+" not func")
+
+	return MethodCalleeOf(m, func(f *types.Func) bool {
+		return f.Name() == method &&
+			f.Type() == methodObj.Type()
+	})
+}
+
+func IfaceCallee(m *Matcher, pkg, iface, method string) CallExprPattern {
+	qualified := pkg + "." + iface
+	ifaceObj := m.Lookup(qualified)
+	assert(ifaceObj != nil, qualified+" not found")
+
+	// types.Named -> types.Interface
+	_, isIface := ifaceObj.Type().Underlying().(*types.Interface)
+	assert(isIface, qualified+" not interface")
+
+	methodObj, _, _ := types.LookupFieldOrMethod(ifaceObj.Type(), false, ifaceObj.Pkg(), method)
+	assert(methodObj != nil, method+" not found")
+
+	_, isFunc := methodObj.Type().(*types.Signature)
+	assert(isFunc, method+" not func")
+
+	return IfaceCalleeOf(m, func(f *types.Func) bool {
+		return methodObj.Type() == f.Type()
+	})
+}
+
+// ↑↑↑↑↑ exactly callee match ↑↑↑↑↑
+
 // ↓↓↓↓↓↓↓↓↓↓↓↓ Recv ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 // IsFuncRecv For ast.FuncDecl Recv
