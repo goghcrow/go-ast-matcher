@@ -179,7 +179,8 @@ func TryGetMatchFun[T Pattern](m *Matcher, n any) MatchFun {
 	case FieldsPattern:
 		return m.tryGetFieldsMatchFun(n.([]*ast.Field))
 	default:
-		panic("unreachable")
+		// panic("unreachable")
+		return nil
 	}
 }
 

@@ -36,45 +36,98 @@ func Bind[T Pattern](m *Matcher, name string, ptn T) T {
 	return And(m, ptn, MkVar[T](m, name))
 }
 
-func Combine1[T Pattern](m *Matcher, a T, un Unary[MatchFun]) T {
+func combine1[T Pattern](m *Matcher, a T, un Unary[MatchFun]) T {
 	return MkPattern[T](m, un(
 		TryGetMatchFun[T](m, a),
 	))
 }
 
-func Combine[T Pattern](m *Matcher, a, b T, bin Binary[MatchFun]) T {
+func combine[T Pattern](m *Matcher, a, b T, bin Binary[MatchFun]) T {
 	return MkPattern[T](m, bin(
 		TryGetMatchFun[T](m, a),
 		TryGetMatchFun[T](m, b),
 	))
 }
 
+// Not a must be Pattern, can not be raw node, TryGetMatchFun(m, a) != nil
 func Not[T Pattern](m *Matcher, a T) T {
-	return Combine1[T](m, a, func(a MatchFun) MatchFun {
+	return combine1[T](m, a, func(a MatchFun) MatchFun {
 		return func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
 			return !a(m, n, stack, binds)
 		}
 	})
 }
+
+// And a, b must be Pattern, can not be raw node
 func And[T Pattern](m *Matcher, a, b T) T {
-	return Combine[T](m, a, b, func(a, b MatchFun) MatchFun {
+	return combine[T](m, a, b, func(a, b MatchFun) MatchFun {
 		return func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
 			return a(m, n, stack, binds) && b(m, n, stack, binds)
 		}
 	})
 }
+
+// Or a, b must be Pattern, can not be raw node
 func Or[T Pattern](m *Matcher, a, b T) T {
-	return Combine[T](m, a, b, func(a, b MatchFun) MatchFun {
+	return combine[T](m, a, b, func(a, b MatchFun) MatchFun {
 		return func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
 			return a(m, n, stack, binds) || b(m, n, stack, binds)
 		}
 	})
 }
 
+// ----------------------------------
+
 // Any when any subtree of rootNode matched pattern, return immediately
-func Any[T Pattern](m *Matcher, pattern ast.Node) T {
+func Any[T Pattern](m *Matcher, nodeOrPtn ast.Node) T {
 	return MkPattern[T](m, func(m *Matcher, rootNode ast.Node, stack []ast.Node, binds Binds) bool {
-		return m.Matched(pattern, rootNode)
+		return m.Matched(nodeOrPtn, rootNode)
+	})
+}
+
+// ----------------------------------
+
+func tryGetOrMkMatchFun[T Pattern](m *Matcher, nodeOrPtn ast.Node) MatchFun {
+	fun := TryGetMatchFun[T](m, nodeOrPtn)
+	if fun == nil {
+		fun = func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+			return m.match(nodeOrPtn, n, stack, binds)
+		}
+	}
+	return fun
+}
+
+func combineNode1[T Pattern](m *Matcher, nodeOrPtn ast.Node, un Unary[MatchFun]) T {
+	return MkPattern[T](m, un(tryGetOrMkMatchFun[T](m, nodeOrPtn)))
+}
+
+func combineNode[T Pattern](m *Matcher, a, b ast.Node, bin Binary[MatchFun]) T {
+	return MkPattern[T](m, bin(
+		tryGetOrMkMatchFun[T](m, a),
+		tryGetOrMkMatchFun[T](m, b),
+	))
+}
+
+func NotNode[T Pattern](m *Matcher, nodeOrPtn ast.Node) T {
+	return combineNode1[T](m, nodeOrPtn, func(a MatchFun) MatchFun {
+		return func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+			return !a(m, n, stack, binds)
+		}
+	})
+}
+func AndNode[T Pattern](m *Matcher, nodeOrPtnA, nodeOrPtnB ast.Node) T {
+	return combineNode[T](m, nodeOrPtnA, nodeOrPtnB, func(a, b MatchFun) MatchFun {
+		return func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+			return a(m, n, stack, binds) && b(m, n, stack, binds)
+		}
+	})
+}
+
+func OrNode[T Pattern](m *Matcher, nodeOrPtnA, nodeOrPtnB ast.Node) T {
+	return combineNode[T](m, nodeOrPtnA, nodeOrPtnB, func(a, b MatchFun) MatchFun {
+		return func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+			return a(m, n, stack, binds) || b(m, n, stack, binds)
+		}
 	})
 }
 
@@ -367,7 +420,8 @@ func IfaceCalleeOf(m *Matcher, p Predicate[*types.Func]) CallExprPattern {
 	})
 }
 
-// ↓↓↓↓↓↓ exactly callee match ↓↓↓↓↓↓
+// ----------------------------------
+// exactly callee match
 
 func BuiltinCallee(m *Matcher, fun string) CallExprPattern {
 	builtIn := types.Universe.Lookup(fun)
@@ -430,8 +484,6 @@ func IfaceCallee(m *Matcher, pkg, iface, method string) CallExprPattern {
 			f.Type() == methodObj.Type()
 	})
 }
-
-// ↑↑↑↑↑ exactly callee match ↑↑↑↑↑
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓ Recv ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
