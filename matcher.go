@@ -229,8 +229,8 @@ func (m *Matcher) MatchNode(pattern, node ast.Node, f Callback) {
 
 type stackBuilder func(node ast.Node) []ast.Node
 
-// when any subtree of rootNode matched pattern, return immediately
-func (m *Matcher) matched(pattern, rootNode ast.Node) (matched bool) {
+// Matched when any subtree of rootNode matched pattern, return immediately
+func (m *Matcher) Matched(pattern, rootNode ast.Node) (matched bool) {
 	var abort = new(int)
 	defer func() {
 		if r := recover(); r != nil && r != abort {
@@ -917,7 +917,7 @@ func (m *Matcher) matchStmts(xs, ys []ast.Stmt, stack []ast.Node, binds Binds) b
 }
 
 func (m *Matcher) matchExprs(xs, ys []ast.Expr, stack []ast.Node, binds Binds) bool {
-	// notice: nil is wildcard pattern, but []ast.Expr{} exactly matched empty ys
+	// notice: nil is wildcard pattern, but []ast.Expr{} exactly Matched empty ys
 	isWildcard := xs == nil
 	if isWildcard {
 		return true
@@ -976,6 +976,10 @@ func (m *Matcher) matchSpecs(xs, ys []ast.Spec, stack []ast.Node, binds Binds) b
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ lookup ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
+func (m *Matcher) LookupPackage(pkg string) *packages.Package {
+	return m.All[pkg]
+}
+
 func (m *Matcher) MustLookupType(qualified string) types.Type {
 	obj := m.Lookup(qualified)
 	assert(obj != nil, "type not found: "+qualified)
@@ -1013,6 +1017,20 @@ func (m *Matcher) Lookups(name string) []types.Object {
 		}
 	}
 	return ret
+}
+
+func (m *Matcher) LookupFieldOrMethod(pkg, typ, fieldOrMethod string) types.Object {
+	qualified := pkg + "." + typ
+	tyObj := m.Lookup(qualified)
+	assert(tyObj != nil, qualified+" not found")
+
+	p := m.All[pkg]
+	assert(p != nil, pkg+" not found")
+	obj, _, indirect := types.LookupFieldOrMethod(tyObj.Type(), false, p.Types, fieldOrMethod)
+	if obj == nil && indirect {
+		obj, _, _ = types.LookupFieldOrMethod(tyObj.Type(), true, p.Types, fieldOrMethod)
+	}
+	return obj
 }
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ etc ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓

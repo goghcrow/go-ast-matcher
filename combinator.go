@@ -74,7 +74,7 @@ func Or[T Pattern](m *Matcher, a, b T) T {
 // Any when any subtree of rootNode matched pattern, return immediately
 func Any[T Pattern](m *Matcher, pattern ast.Node) T {
 	return MkPattern[T](m, func(m *Matcher, rootNode ast.Node, stack []ast.Node, binds Binds) bool {
-		return m.matched(pattern, rootNode)
+		return m.Matched(pattern, rootNode)
 	})
 }
 
@@ -106,7 +106,7 @@ func Contains[S SlicePattern](m *Matcher, p ast.Node) S {
 		xs := reflect.ValueOf(n)
 		for i := 0; i < xs.Len(); i++ {
 			node := xs.Index(i).Interface().(ast.Node)
-			if m.matched(p, node) {
+			if m.Matched(p, node) {
 				return true
 			}
 		}
@@ -167,11 +167,26 @@ func ObjectOf(m *Matcher, pred Predicate[types.Object]) IdentPattern {
 		if n == nil /*ast.Node(nil)*/ {
 			return false
 		}
-		id := n.(*ast.Ident)
-		if id == nil {
+		switch n := n.(type) {
+		case *ast.Ident:
+			obj := m.ObjectOf(n)
+			if obj == nil {
+				return false
+			}
+			return pred(obj)
+		case *ast.SelectorExpr:
+			sel := m.Selections[n]
+			if sel == nil {
+				return false
+			}
+			obj := sel.Obj()
+			if obj == nil {
+				return false
+			}
+			return pred(obj)
+		default:
 			return false
 		}
-		return pred(m.ObjectOf(id))
 	})
 }
 
