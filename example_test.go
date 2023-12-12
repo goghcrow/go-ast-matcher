@@ -229,7 +229,7 @@ func PatternOfFuncDeclHasAnyParam(m *Matcher, param *ast.Field) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Type: &ast.FuncType{
 			Params: &ast.FieldList{
-				List: Contains[FieldsPattern](m, param),
+				List: SliceContains[FieldsPattern](m, param),
 			},
 		},
 	}
@@ -239,7 +239,7 @@ func PatternOfFuncDeclHasAnyParamNode(m *Matcher, param *ast.Field) *ast.FuncDec
 	return &ast.FuncDecl{
 		Type: &ast.FuncType{
 			Params: &ast.FieldList{
-				List: Contains[FieldsPattern](m, param),
+				List: SliceContains[FieldsPattern](m, param),
 			},
 		},
 	}
@@ -250,7 +250,7 @@ func PatternOfMethodHasAnyParam(m *Matcher, param *ast.Field) *ast.FuncDecl {
 		Recv: IsMethodRecv(m),
 		Type: &ast.FuncType{
 			Params: &ast.FieldList{
-				List: Contains[FieldsPattern](m, param),
+				List: SliceContains[FieldsPattern](m, param),
 			},
 		},
 	}
@@ -460,7 +460,7 @@ func GrepGormTablerTableName(dir string) {
 			List: []ast.Stmt{
 				&ast.ReturnStmt{
 					Results: []ast.Expr{
-						Bind[ExprPattern](m, "tableName", BasicLitOfKind(m, token.STRING)),
+						Bind[ExprPattern](m, "tableName", LitKindOf(m, token.STRING)),
 
 						// Or
 						// Bind[BasicLitPattern](m, "tableName", MkPattern[BasicLitPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {

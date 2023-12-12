@@ -882,9 +882,9 @@ func (m *Matcher) matchBasicLit(x, y *ast.BasicLit, stack []ast.Node, binds Bind
 	if y == nil {
 		return false
 	}
-	// Notice: BasicLit is atomic Pattern, does not support expanding match
-	// e.g. matching BasicLit.Kind
-	// And to judge equivalence of  literal by constant.Compare, not just Kind
+	// Notice: BasicLit is atomic Pattern,
+	// &ast.BasicLit{ Kind: token.INT } can be used for matching INT literal
+	// because zero Value is ambiguous, wildcard or zero value ?
 	xVal := constant.MakeFromLiteral(x.Value, x.Kind, 0)
 	yVal := constant.MakeFromLiteral(y.Value, y.Kind, 0)
 	return constant.Compare(xVal, token.EQL, yVal)

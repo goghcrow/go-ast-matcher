@@ -7,6 +7,7 @@ import (
 )
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Pattern ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+// Public API
 
 // Notice myself: How to add new Pattern
 // 0. Declare XXXPattern type, add to Pattern interface
@@ -60,6 +61,7 @@ type (
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Factory ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
+// MkVar make variable for binding matched Node
 func MkVar[T Pattern](m *Matcher, name string) T {
 	return MkPattern[T](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
 		binds[name] = n
@@ -67,6 +69,7 @@ func MkVar[T Pattern](m *Matcher, name string) T {
 	})
 }
 
+// PatternOf make pattern from ast.Node
 func PatternOf[T Pattern](m *Matcher, ptn ast.Node) T {
 	assert(!IsPseudoNode(ptn), "invalid pattern")
 	return MkPattern[T](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
@@ -74,6 +77,7 @@ func PatternOf[T Pattern](m *Matcher, ptn ast.Node) T {
 	})
 }
 
+// MkPattern make pattern from MatchFun
 func MkPattern[T Pattern](m *Matcher, f MatchFun) T {
 	var zero T
 	switch any(zero).(type) {
@@ -120,7 +124,7 @@ func IsPattern[T Pattern](m *Matcher, n any) bool {
 	return TryGetMatchFun[T](m, n) != nil
 }
 
-// TryGetMatchFun
+// TryGetMatchFun get MatchFun from pattern
 // if T is NodePattern, n must be ast.Node
 // if T is StmtPattern, n must be ast.Stmt
 // if T is ExprPattern, n must be ast.Expr
@@ -181,6 +185,22 @@ func TryGetMatchFun[T Pattern](m *Matcher, n any) MatchFun {
 	default:
 		// panic("unreachable")
 		return nil
+	}
+}
+
+func MustGetMatchFun[T Pattern](m *Matcher, n any) MatchFun {
+	fun := TryGetMatchFun[T](m, n)
+	assert(fun != nil, "invalid pattern")
+	return fun
+}
+
+func TryGetOrMkMatchFun[T Pattern](m *Matcher, nodeOrPtn ast.Node) MatchFun {
+	fun := TryGetMatchFun[T](m, nodeOrPtn)
+	if fun != nil {
+		return fun
+	}
+	return func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		return m.match(nodeOrPtn, n, stack, binds)
 	}
 }
 
@@ -305,7 +325,7 @@ func (m *Matcher) mkFieldsPattern(f MatchFun) FieldsPattern {
 	return []*ast.Field{m.mkFieldPattern(f), nil}
 }
 
-// ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ tryGetMatchFun ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+// ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ tryGetXXXMatchFun ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 func (m *Matcher) tryGetNodeMatchFun(n ast.Node) MatchFun {
 	if x, ok := n.(NodePattern); ok {
@@ -437,6 +457,7 @@ func (m *Matcher) tryGetFieldsMatchFun(xs []*ast.Field) MatchFun {
 }
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Pseudo Node ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+// Used For MatchFun Callback
 
 type PseudoNode interface {
 	MatchFun | StmtsNode | ExprsNode | SpecsNode | IdentsNode | FieldsNode | TokenNode
