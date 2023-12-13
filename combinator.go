@@ -265,8 +265,8 @@ func IdentOf(m *Matcher, p Predicate[*ast.Ident]) IdentPattern {
 		if n == nil /*ast.Node(nil)*/ {
 			return false
 		}
-		ident := n.(*ast.Ident)
-		if ident == nil {
+		ident, ok := n.(*ast.Ident)
+		if !ok || ident == nil {
 			return false
 		}
 		return p(ident)
@@ -370,8 +370,8 @@ func SelectorOf(m *Matcher, p Predicate[*ast.SelectorExpr]) ExprPattern {
 		if n == nil /*ast.Node(nil)*/ {
 			return false
 		}
-		sel := n.(*ast.SelectorExpr)
-		if sel == nil {
+		sel, ok := n.(*ast.SelectorExpr)
+		if !ok || sel == nil {
 			return false
 		}
 		return p(sel)
