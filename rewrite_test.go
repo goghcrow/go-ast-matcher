@@ -63,7 +63,7 @@ var rewriteTests = map[string]struct {
 		match: func(m *Matcher) ast.Node {
 			return &ast.CallExpr{
 				Fun: And(m,
-					IdentNameIs(m, "println"),
+					IdentNameOf(m, "println"),
 					IsBuiltin(m),
 				),
 				Args: MkVar[ExprsPattern](m, "args"),

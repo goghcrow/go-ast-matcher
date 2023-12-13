@@ -126,7 +126,7 @@ func PatternOfAllFuncOrMethodDeclName(m *Matcher) ast.Node {
 func PatternOfFuncOrMethodDeclWithSpecName(name string) func(m *Matcher) ast.Node {
 	return func(m *Matcher) ast.Node {
 		return &ast.FuncDecl{
-			Name: IdentNameIs(m, name),
+			Name: IdentNameOf(m, name),
 		}
 	}
 }
@@ -165,7 +165,7 @@ func PatternOfAssign(m *Matcher) ast.Node {
 func PatternOfAppendWithNoValue(m *Matcher) ast.Node {
 	return &ast.CallExpr{
 		Fun: And(m,
-			IdentNameIs(m, "append"),
+			IdentNameOf(m, "append"),
 			IsBuiltin(m),
 		),
 		Args: SliceLenEQ[ExprsPattern](m, 1),
@@ -203,17 +203,26 @@ func MkPatternOfSelectorNameReg(name *regexp.Regexp) func(m *Matcher) *ast.CallE
 	}
 }
 
+func SelectorOfPkgPath(m *Matcher, path string, sel IdentPattern) ExprPattern {
+	return AndEx[ExprPattern](m,
+		SelectorPkgOf(m, func(pkg *types.Package) bool {
+			return pkg.Path() == path
+		}),
+		&ast.SelectorExpr{Sel: sel},
+	)
+}
+
 func PatternOfCallAtomicAdder(m *Matcher) ast.Node {
 	adders := regexp.MustCompile("^(AddInt64|AddUintptr)$")
 	return &ast.CallExpr{
-		Fun: SelectorOfPkgPath(m, "sync/atomic", adders),
+		Fun: SelectorOfPkgPath(m, "sync/atomic", IdentNameMatch(m, adders)),
 	}
 }
 
 func PatternOfAtomicSwapStructField(m *Matcher) ast.Node {
 	// atomic.AddInt64(&structObject.field, *)
 	return &ast.CallExpr{
-		Fun: SelectorOfPkgPath(m, "sync/atomic", regexp.MustCompile("^SwapInt64$")),
+		Fun: SelectorOfPkgPath(m, "sync/atomic", IdentNameMatch(m, regexp.MustCompile("^SwapInt64$"))),
 		Args: []ast.Expr{
 			PtrOf(SelectorOfStructField(m, func(t *types.Struct) bool {
 				return true
@@ -256,6 +265,35 @@ func PatternOfMethodHasAnyParam(m *Matcher, param *ast.Field) *ast.FuncDecl {
 	}
 }
 
+// TODO: Replaced By Object
+func IsFuncRecv(m *Matcher) FieldListPattern {
+	return MkPattern[FieldListPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		return IsNilNode(n)
+	})
+}
+
+// TODO: Replaced By Object
+func IsMethodRecv(m *Matcher) FieldListPattern {
+	return Not[FieldListPattern](m, IsFuncRecv(m))
+}
+
+// TODO: Replaced By Object
+func RecvOf(m *Matcher, f func(recv *ast.Field) bool) FieldListPattern {
+	return MkPattern[FieldListPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		if n == nil /*ast.Node(nil)*/ {
+			return false
+		}
+		lst := n.(*ast.FieldList)
+		if lst == nil {
+			return false
+		}
+		if lst.NumFields() != 1 {
+			return false
+		}
+		return f(lst.List[0])
+	})
+}
+
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Gorm ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 func PatternOfNonCompositeModelCall(m *Matcher) func() ast.Node {
@@ -286,7 +324,7 @@ func PatternOfNonCompositeModelCall_(m *Matcher) func() ast.Node {
 		return &ast.CallExpr{
 			Fun: &ast.SelectorExpr{
 				X:   TypeAssignableTo[ExprPattern](m, gormDB),
-				Sel: IdentNameIs(m, "Model"),
+				Sel: IdentNameOf(m, "Model"),
 			},
 			Args: []ast.Expr{
 				Not(m,
@@ -441,12 +479,12 @@ func GrepGormTablerTableName(dir string) {
 		// 		types.Implements(types.NewPointer(ty), gormTabler)
 		// }),
 		// method name must be TableName
-		// Name: IdentNameIs(m, "TableName"),
+		// Name: IdentNameOf(m, "TableName"),
 
 		Name: And[IdentPattern](m,
 			// IsMethod(m),
-			IdentNameIs(m, "TableName"),
-			RecvTypeOf(m, func(ty types.Type) bool {
+			IdentNameOf(m, "TableName"),
+			IdentRecvTypeOf(m, func(ty types.Type) bool {
 				return types.Implements(ty, gormTabler) ||
 					types.Implements(types.NewPointer(ty), gormTabler)
 			}),

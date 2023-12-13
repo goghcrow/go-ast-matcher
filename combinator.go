@@ -12,6 +12,11 @@ import (
 	"golang.org/x/tools/go/types/typeutil"
 )
 
+// Notice:  matched by three layer
+// matched by ast.Node >>
+// matched by types.Object >>
+// matched by types.Type
+
 type (
 	Comparator[T /*comparable*/ any] func(T, T) bool
 	Predicate[T any]                 func(T) bool
@@ -126,9 +131,18 @@ func combineEx[T Pattern](m *Matcher, a, b ast.Node, bin Binary[MatchFun]) T {
 	))
 }
 
+// ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Object Combinators ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+func ObjectOf(m *Matcher, p Predicate[types.Object]) ExprPattern {
+	return OrEx[ExprPattern](m,
+		IdentObjectOf(m, p),
+		SelectorObjectOf(m, p),
+	)
+}
+
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Typing Combinators ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
-func TypeOf[T TypingPattern](m *Matcher, pred Predicate[types.Type]) T {
+func TypeOf[T TypingPattern](m *Matcher, p Predicate[types.Type]) T {
 	return MkPattern[T](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
 		// typeof(n) = ast.Expr | *ast.Ident
 		// n maybe nil, e.g. const x = 1
@@ -142,7 +156,7 @@ func TypeOf[T TypingPattern](m *Matcher, pred Predicate[types.Type]) T {
 		exprTy := m.TypeOf(expr)
 		// assert(ty != nil, "type not found: "+m.ShowNode(expr))
 		// if ty == nil { return false }
-		return pred(exprTy)
+		return p(exprTy)
 	})
 }
 
@@ -247,7 +261,7 @@ func TagOf(m *Matcher, p Predicate[*reflect.StructTag]) BasicLitPattern {
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Identifier Combinators ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 func IdentOf(m *Matcher, p Predicate[*ast.Ident]) IdentPattern {
-	return m.mkIdentPattern(func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+	return MkPattern[IdentPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
 		if n == nil /*ast.Node(nil)*/ {
 			return false
 		}
@@ -259,7 +273,17 @@ func IdentOf(m *Matcher, p Predicate[*ast.Ident]) IdentPattern {
 	})
 }
 
-func IdentNameIs(m *Matcher, name string) IdentPattern {
+func IdentObjectOf(m *Matcher, p Predicate[types.Object]) IdentPattern {
+	return IdentOf(m, func(id *ast.Ident) bool {
+		obj := m.ObjectOf(id)
+		if obj == nil {
+			return false
+		}
+		return p(obj)
+	})
+}
+
+func IdentNameOf(m *Matcher, name string) IdentPattern {
 	return IdentOf(m, func(id *ast.Ident) bool {
 		return name == id.Name
 	})
@@ -271,49 +295,64 @@ func IdentNameMatch(m *Matcher, reg *regexp.Regexp) IdentPattern {
 	})
 }
 
-// ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Object Combinators ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
-
-func ObjectOf(m *Matcher, pred Predicate[types.Object]) ExprPattern {
-	return OrEx[ExprPattern](m,
-		IdentObjectOf(m, pred),
-		SelectorObjectOf(m, pred),
-	)
-}
-
-func IdentObjectOf(m *Matcher, pred Predicate[types.Object]) IdentPattern {
-	return MkPattern[IdentPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
-		if n == nil /*ast.Node(nil)*/ {
-			return false
-		}
-		switch n := n.(type) {
-		case *ast.Ident:
-			obj := m.ObjectOf(n)
-			if obj == nil {
-				return false
-			}
-			return pred(obj)
-		default:
-			return false
-		}
+func IdentTypeOf(m *Matcher, p Predicate[types.Type]) IdentPattern {
+	// return TypeOf[IdentPattern](m, p)
+	return IdentObjectOf(m, func(obj types.Object) bool {
+		return p(obj.Type())
 	})
 }
 
-func SelectorObjectOf(m *Matcher, pred Predicate[types.Object]) ExprPattern {
-	return MkPattern[ExprPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
-		if n == nil /*ast.Node(nil)*/ {
+func IdentSigOf(m *Matcher, p Predicate[*types.Signature]) IdentPattern {
+	return IdentTypeOf(m, func(t types.Type) bool {
+		if sig, ok := t.(*types.Signature); ok {
+			return p(sig)
+		}
+		return false
+	})
+}
+
+func IdentRecvOf(m *Matcher, p Predicate[*types.Var]) IdentPattern {
+	return IdentSigOf(m, func(sig *types.Signature) bool {
+		if sig.Recv() == nil {
 			return false
 		}
-		switch n := n.(type) {
-		case *ast.SelectorExpr:
-			// XXX m.Selections[n]
-			obj := m.ObjectOf(n.Sel)
-			if obj == nil {
-				return false
+		return p(sig.Recv())
+	})
+}
+
+// IdentRecvTypeOf for ast.FuncDecl { Name }
+func IdentRecvTypeOf(m *Matcher, p Predicate[types.Type]) IdentPattern {
+	return IdentRecvOf(m, func(recv *types.Var) bool {
+		return p(recv.Type())
+	})
+}
+
+func IdentIsFun(m *Matcher) IdentPattern {
+	return IdentSigOf(m, func(sig *types.Signature) bool {
+		return sig.Recv() == nil
+	})
+}
+
+func IdentIsMethod(m *Matcher, p Predicate[types.Type]) IdentPattern {
+	return IdentSigOf(m, func(sig *types.Signature) bool {
+		return sig.Recv() != nil
+	})
+}
+
+func IdentParamsOf(m *Matcher, p Predicate[*types.Tuple]) IdentPattern {
+	return IdentSigOf(m, func(sig *types.Signature) bool {
+		return p(sig.Params())
+	})
+}
+
+func IdentAnyParamOf(m *Matcher, p Predicate[*types.Var]) IdentPattern {
+	return IdentParamsOf(m, func(params *types.Tuple) bool {
+		for i, n := 0, params.Len(); i < n; i++ {
+			if p(params.At(i)) {
+				return true
 			}
-			return pred(obj)
-		default:
-			return false
 		}
+		return false
 	})
 }
 
@@ -322,6 +361,88 @@ func IsBuiltin(m *Matcher) IdentPattern {
 		_, ok := obj.(*types.Builtin)
 		return ok
 	})
+}
+
+// ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Selector Combinators ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+func SelectorOf(m *Matcher, p Predicate[*ast.SelectorExpr]) ExprPattern {
+	return MkPattern[ExprPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		if n == nil /*ast.Node(nil)*/ {
+			return false
+		}
+		sel := n.(*ast.SelectorExpr)
+		if sel == nil {
+			return false
+		}
+		return p(sel)
+	})
+}
+
+func SelectorObjectOf(m *Matcher, p Predicate[types.Object]) ExprPattern {
+	return SelectorOf(m, func(sel *ast.SelectorExpr) bool {
+		obj := m.ObjectOf(sel.Sel)
+		if obj == nil {
+			return false
+		}
+		return p(obj)
+	})
+}
+
+// SelectorPkgOf Assume X is ident
+func SelectorPkgOf(m *Matcher, p Predicate[*types.Package]) *ast.SelectorExpr {
+	return &ast.SelectorExpr{
+		X: IdentObjectOf(m, func(obj types.Object) bool {
+			pkg, ok := obj.(*types.PkgName)
+			return ok && p(pkg.Imported())
+		}),
+	}
+}
+
+// // SelectorTypeOf Assume X is ident
+// func SelectorTypeOf(m *Matcher, p Predicate[*types.TypeName]) *ast.SelectorExpr {
+// 	return &ast.SelectorExpr{
+// 		X: IdentObjectOf(m, func(obj types.Object) bool {
+// 			ty, ok := obj.(*types.TypeName)
+// 			return ok && p(ty)
+// 		}),
+// 	}
+// }
+
+// SelectorTypeOf
+// e.g. struct{x int}.x
+// so can not use IdentObjectOf
+func SelectorTypeOf(m *Matcher, p Predicate[types.Type]) *ast.SelectorExpr {
+	return &ast.SelectorExpr{
+		X: TypeOf[ExprPattern](m, p),
+	}
+}
+
+func SelectorStructOf(m *Matcher, p Predicate[*types.Struct]) *ast.SelectorExpr {
+	return SelectorTypeOf(m, func(ty types.Type) bool {
+		assert(ty != nil, "invalid")
+		st, ok := ty.Underlying().(*types.Struct)
+		if !ok {
+			return false
+		}
+		return p(st)
+	})
+}
+
+func SelectorOfStructField(m *Matcher, pStruct Predicate[*types.Struct], pField Predicate[*types.Var]) ExprPattern {
+	// must be struct field selector
+	return AndEx[ExprPattern](m,
+		SelectorStructOf(m, pStruct),
+		SelectorObjectOf(m, func(obj types.Object) bool {
+			tv, ok := obj.(*types.Var)
+			return ok && tv.IsField() && pField(tv)
+		}),
+		// MkPattern[ExprPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		// 	sel, _ := n.(*ast.SelectorExpr) // has confirmed
+		// 	assert(sel != nil && m.Selections[sel] != nil, "invalid")
+		// 	tv, ok := m.Selections[sel].Obj().(*types.Var)
+		// 	return ok && tv.IsField() && pField(tv)
+		// }),
+	)
 }
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Slice Combinators ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
@@ -517,115 +638,13 @@ func IfaceCallee(m *Matcher, pkg, iface, method string) CallExprPattern {
 	})
 }
 
-// ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Recv Combinators ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
-
-// IsFuncRecv For ast.FuncDecl Recv
-func IsFuncRecv(m *Matcher) FieldListPattern {
-	return MkPattern[FieldListPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
-		return IsNilNode(n)
-	})
-}
-
-func IsMethodRecv(m *Matcher) FieldListPattern {
-	return Not[FieldListPattern](m, IsFuncRecv(m))
-}
-
-func SignatureOf(m *Matcher, p Predicate[*types.Signature]) IdentPattern {
-	return TypeOf[IdentPattern](m, func(t types.Type) bool {
-		if sig, ok := t.(*types.Signature); ok {
-			return p(sig)
-		}
-		return false
-	})
-}
-
-// RecvTypeOf for ast.FuncDecl { Name }
-func RecvTypeOf(m *Matcher, p Predicate[types.Type]) IdentPattern {
-	return SignatureOf(m, func(sig *types.Signature) bool {
-		if sig.Recv() == nil {
-			return false
-		}
-		return p(sig.Recv().Type())
-	})
-}
-
-// RecvOf for ast.FuncDecl { Recv }
-func RecvOf(m *Matcher, f func(recv *ast.Field) bool) FieldListPattern {
-	return MkPattern[FieldListPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
-		if n == nil /*ast.Node(nil)*/ {
-			return false
-		}
-		lst := n.(*ast.FieldList)
-		if lst == nil {
-			return false
-		}
-		if lst.NumFields() != 1 {
-			return false
-		}
-		return f(lst.List[0])
-	})
-}
-
-// ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Selector Combinators ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
-
-// TODO replace by objectOf
-func SelectorOfPkgPath(m *Matcher, path string, reg *regexp.Regexp) *ast.SelectorExpr {
-	return SelectorOfPkg(m, func(pkg *types.Package) bool {
-		return pkg.Path() == path
-	}, func(ident *ast.Ident) bool {
-		return reg.MatchString(ident.Name)
-	})
-}
-
-// TODO replace by objectOf
-func SelectorOfPkg(m *Matcher, pPkg Predicate[*types.Package], pId Predicate[*ast.Ident]) *ast.SelectorExpr {
-	return &ast.SelectorExpr{
-		X: IdentOf(m, func(id *ast.Ident) bool {
-			pkg, ok := m.Uses[id].(*types.PkgName)
-			return ok && pPkg(pkg.Imported())
-		}),
-		Sel: IdentOf(m, pId),
-	}
-}
-
-// TODO replace by objectOf
-func SelectorOfStructField(m *Matcher, pStruct Predicate[*types.Struct], pField Predicate[*types.Var]) ExprPattern {
-	// must be struct field selector
-	return And(m,
-		PatternOf[ExprPattern](m, &ast.SelectorExpr{
-			X: TypeOf[ExprPattern](m, func(ty types.Type) bool {
-				assert(ty != nil, "invalid")
-				ts, ok := ty.Underlying().(*types.Struct)
-				return ok && pStruct(ts)
-			}),
-		}),
-		MkPattern[ExprPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
-			// TODO m.ObjectOf(sel.Sel)
-			sel, _ := n.(*ast.SelectorExpr) // has confirmed
-			assert(sel != nil && m.Selections[sel] != nil, "invalid")
-			tv, ok := m.Selections[sel].Obj().(*types.Var)
-			return ok && tv.IsField() && pField(tv)
-		}),
-	)
-}
-
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Other Combinators ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 func InitFunc(m *Matcher) *ast.FuncDecl {
-	// return &ast.FuncDecl{
-	// 	// types.Identical(*types.Signature, *types.Signature) does not compare recv
-	// 	Recv: IsFuncRecv(m),
-	// 	Name: And(m,
-	// 		IdentNameIs(m, "init"),
-	// 		TypeIdentical[IdentPattern](m, types.NewSignatureType(
-	// 			nil, nil, nil, nil, nil, false,
-	// 		)),
-	// 	),
-	// }
 	return &ast.FuncDecl{
 		Name: And(m,
-			IdentNameIs(m, "init"),
-			SignatureOf(m, func(sig *types.Signature) bool {
+			IdentNameOf(m, "init"),
+			IdentSigOf(m, func(sig *types.Signature) bool {
 				return sig.Recv() == nil && sig.Params() == nil && sig.Results() == nil
 			}),
 		),

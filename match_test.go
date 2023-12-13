@@ -37,7 +37,7 @@ var matchPatterns = map[string]func(m *Matcher) ast.Node{
 		return Bind(m,
 			"var",
 			And(m,
-				IdentNameIs(m, "id"),
+				IdentNameOf(m, "id"),
 				TypeIdentical[IdentPattern](m, m.MustLookupType("int")),
 			),
 		)
