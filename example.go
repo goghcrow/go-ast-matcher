@@ -95,6 +95,10 @@ func PatternOfIfaceCalleeOf(m *Matcher) ast.Node {
 }
 
 // ↓↓↓↓↓↓ exactly callee match ↓↓↓↓↓↓
+const (
+	Module = "github.com/goghcrow/go-ast-matcher/testdata/match"
+)
+
 func PatternOfBuiltin_append(m *Matcher) ast.Node {
 	return BuiltinCallee(m, "append")
 }
@@ -339,7 +343,7 @@ func PatternOfNonCompositeModelCall_(m *Matcher) func() ast.Node {
 }
 
 func GrepFuncDeclWithSpecTypeOfParam(dir string, qualifiedType string, opts ...MatchOption) {
-	m := NewMatcher(dir, []string{PatternAll}, opts...)
+	m := NewMatcher(dir, PatternAll, opts...)
 
 	ty := m.MustLookupType(qualifiedType)
 	pattern := PatternOfMethodHasAnyParam(m,
@@ -360,7 +364,7 @@ func GrepFuncDeclWithSpecTypeOfParam(dir string, qualifiedType string, opts ...M
 }
 
 func GrepNestedFuncLit(dir string) {
-	m := NewMatcher(dir, []string{PatternAll})
+	m := NewMatcher(dir, PatternAll)
 	outerFuncLit := func(stack []ast.Node) ast.Node {
 		for _, it := range stack {
 			outer, _ := it.(*ast.FuncLit)
@@ -384,7 +388,7 @@ func GrepNestedFuncLit(dir string) {
 }
 
 func GrepInterface(dir string) {
-	m := NewMatcher(dir, []string{PatternAll})
+	m := NewMatcher(dir, PatternAll)
 
 	// match by typeSpec
 	m.Match(&ast.TypeSpec{
@@ -414,7 +418,7 @@ func GrepInterface(dir string) {
 }
 
 func GrepDBProxy(dir string) {
-	m := NewMatcher(dir, []string{PatternAll})
+	m := NewMatcher(dir, PatternAll)
 
 	fNames := regexp.MustCompile("^(GetDBProxy|GetDB)$")
 	pattern := MkPatternOfSelectorNameReg(fNames)(m)
@@ -433,7 +437,7 @@ func GrepDBProxy(dir string) {
 
 func GrepGormTabler(dir string) {
 	// Notice: we want match node by outer type, so WithLoadDepts needed
-	m := NewMatcher(dir, []string{PatternAll}, WithLoadDepts())
+	m := NewMatcher(dir, PatternAll, WithLoadDepts())
 
 	// types.Named -> types.Interface
 	gormTabler := m.MustLookupType("gorm.io/gorm/schema.Tabler").Underlying().(*types.Interface)
@@ -466,7 +470,7 @@ func GrepGormTabler(dir string) {
 
 func GrepGormTablerTableName(dir string) {
 	// Notice: we want match node by outer type, so WithLoadDepts needed
-	m := NewMatcher(dir, []string{PatternAll}, WithLoadDepts())
+	m := NewMatcher(dir, PatternAll, WithLoadDepts())
 
 	// types.Named -> types.Interface
 	gormTabler := m.MustLookupType("gorm.io/gorm/schema.Tabler").Underlying().(*types.Interface)
@@ -582,7 +586,7 @@ func GrepGormChainAPI(dir string, filter func(*Matcher, *ast.FuncDecl) bool, opt
 	// Notice: we want match node by outer type, so WithLoadDepts needed
 	m := NewMatcher(
 		dir,
-		[]string{PatternAll},
+		PatternAll,
 		append(opts, WithLoadDepts())...,
 	)
 

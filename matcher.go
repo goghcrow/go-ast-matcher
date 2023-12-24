@@ -32,11 +32,13 @@ type MatchFlags struct {
 type MatchOption func(*MatchFlags)
 
 // WithLoadDepts is slowly, but you can match external types
-func WithLoadDepts() MatchOption { return func(opts *MatchFlags) { opts.loadDepts = true } }
+func WithLoadDepts() MatchOption { return func(opts *MatchFlags) { opts.LoadDepts = true } }
 
 // WithBuildTag comma-separated list of extra build tags (see: go help buildconstraint)
-func WithBuildTag(tag string) MatchOption { return func(opts *MatchFlags) { opts.buildTag = tag } }
-func WithLoadTest() MatchOption           { return func(opts *MatchFlags) { opts.test = true } }
+func WithBuildTag(tag string) MatchOption  { return func(opts *MatchFlags) { opts.BuildTag = tag } }
+func WithGopath(gopath string) MatchOption { return func(opts *MatchFlags) { opts.Gopath = gopath } }
+func WithLoadTest() MatchOption            { return func(opts *MatchFlags) { opts.Test = true } }
+func WithSuppressErrors() MatchOption      { return func(opts *MatchFlags) { opts.PrintErrors = false } }
 
 func WithUnparenExpr() MatchOption { return func(opts *MatchFlags) { opts.unparenExpr = true } }
 func WithCallEllipsisMatch() MatchOption {
@@ -94,6 +96,7 @@ func NewMatcher(
 	opts ...MatchOption,
 ) *Matcher {
 	flags := &MatchFlags{}
+	flags.PrintErrors = true
 	for _, opt := range opts {
 		opt(flags)
 	}
@@ -1034,6 +1037,10 @@ func (m *Matcher) LookupFieldOrMethod(pkg, typ, fieldOrMethod string) types.Obje
 }
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ etc ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+func (m *Matcher) Position(pos token.Pos) token.Position {
+	return m.FSet.Position(pos)
+}
 
 func (m *Matcher) ShowPos(n ast.Node) string {
 	return PosOfNode(m.FSet, n).String()

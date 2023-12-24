@@ -72,10 +72,6 @@ var matchPatterns = map[string]func(m *Matcher) ast.Node{
 	"callee/iface_callee_Show_String": PatternOfIface_Show۰String,
 }
 
-const (
-	Module = "github.com/goghcrow/go-ast-matcher/testdata/match"
-)
-
 func TestMatchRun(t *testing.T) {
 	files, err := filepath.Glob("testdata/match/*.txt")
 	fatalIf(t, err)
@@ -112,7 +108,7 @@ func TestMatchRun(t *testing.T) {
 			t.Run(patternName, func(t *testing.T) {
 				stdout := ""
 
-				m := NewMatcher(dir, []string{PatternAll})
+				m := NewMatcher(dir, PatternAll)
 				m.VisitAllFiles(func(m *Matcher, file *ast.File) {
 					t.Log(patternName)
 					pattern := matchPatterns[patternName](m)

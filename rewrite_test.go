@@ -112,7 +112,7 @@ func TestRewriteRun(t *testing.T) {
 			fatalIf(t, err)
 		}
 
-		m := NewMatcher(dir, []string{PatternAll})
+		m := NewMatcher(dir, PatternAll)
 		m.VisitAllFiles(func(m *Matcher, file *ast.File) {
 			name := filepath.Base(m.Filename)
 			t.Run(testFile+"/"+name, func(t *testing.T) {

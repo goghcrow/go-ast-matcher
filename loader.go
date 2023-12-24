@@ -3,6 +3,7 @@ package matcher
 import (
 	"go/ast"
 	"go/token"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -15,8 +16,11 @@ type (
 	GeneratedBy = string
 )
 
+var (
+	PatternAll = []string{"./..."}
+)
+
 const (
-	PatternAll = "./..."
 	PatternStd = "std"
 
 	// LoadDepts load all dependencies
@@ -29,15 +33,18 @@ const (
 		packages.NeedTypes |
 		packages.NeedSyntax |
 		packages.NeedTypesInfo |
+		packages.NeedTypesSizes |
 		packages.NeedModule
 )
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Loader ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 type LoadFlags struct {
-	buildTag  string // comma-separated list of extra build tags (see: go help buildconstraint)
-	test      bool   // load includes tests packages
-	loadDepts bool   // load all dependencies, may heavily slow
+	Gopath      string
+	BuildTag    string // comma-separated list of extra build tags (see: go help buildconstraint)
+	Test        bool   // load includes tests packages
+	LoadDepts   bool   // load all dependencies, may heavily slow
+	PrintErrors bool
 }
 
 type Loader struct {
@@ -61,7 +68,7 @@ func NewLoader() *Loader {
 // patterns: (see: packages.Load)
 func (d *Loader) Load(dir string, patterns []string, flags LoadFlags) {
 	mode := LoadMode
-	if flags.loadDepts {
+	if flags.LoadDepts {
 		mode |= LoadDepts
 	}
 
@@ -71,10 +78,15 @@ func (d *Loader) Load(dir string, patterns []string, flags LoadFlags) {
 	cfg := &packages.Config{
 		Fset:       d.FSet,
 		Mode:       mode,
-		Tests:      flags.test,
+		Tests:      flags.Test,
 		Dir:        dir,
-		BuildFlags: []string{"-tags=" + flags.buildTag},
+		BuildFlags: []string{"-tags=" + flags.BuildTag},
 	}
+	if flags.Gopath != "" {
+		cfg.Env = append(os.Environ(), "GOPATH="+flags.Gopath)
+	}
+
+	patterns = append(patterns)
 	d.Init, err = packages.Load(cfg, patterns...)
 	panicIfErr(err)
 
@@ -83,8 +95,10 @@ func (d *Loader) Load(dir string, patterns []string, flags LoadFlags) {
 	}
 
 	packages.Visit(d.Init, nil, func(p *packages.Package) {
-		for _, err := range p.Errors {
-			errLog(err)
+		if flags.PrintErrors {
+			for _, err := range p.Errors {
+				errLog(err)
+			}
 		}
 
 		// Gather all packages

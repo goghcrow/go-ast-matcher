@@ -3,7 +3,7 @@ module github.com/goghcrow/go-ast-matcher
 go 1.19
 
 require (
-	github.com/goghcrow/go-ansi v1.0.0
+	github.com/goghcrow/go-ansi v1.0.0 // for test
 	golang.org/x/tools v0.16.1
 )
 

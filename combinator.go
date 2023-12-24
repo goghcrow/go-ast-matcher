@@ -501,7 +501,11 @@ func CalleeOf(m *Matcher, p Predicate[types.Object]) CallExprPattern {
 		if call == nil {
 			return false
 		}
-		return p(typeutil.Callee(m.Info, call))
+		callee := typeutil.Callee(m.Info, call)
+		if callee == nil {
+			return false
+		}
+		return p(callee)
 	})
 }
 
