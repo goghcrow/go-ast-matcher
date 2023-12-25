@@ -14,8 +14,9 @@ import (
 )
 
 type CallGraphFlags struct {
-	FunDeclPattern  *ast.FuncDecl
-	CallExprPattern *ast.CallExpr
+	FunDeclPattern   *ast.FuncDecl
+	CallExprPattern  *ast.CallExpr
+	ShowOrphanedNode bool
 }
 
 type CallGraphOption func(*CallGraphFlags)
@@ -25,6 +26,9 @@ func WithCallerPattern(funPtn *ast.FuncDecl) CallGraphOption {
 }
 func WithCallExprPattern(callPtn *ast.CallExpr) CallGraphOption {
 	return func(flags *CallGraphFlags) { flags.CallExprPattern = callPtn }
+}
+func WithShowOrphanedNode() CallGraphOption {
+	return func(flags *CallGraphFlags) { flags.ShowOrphanedNode = true }
 }
 
 // CallGraph statical ast-pattern-based call graph
@@ -39,14 +43,16 @@ func (m *Matcher) CallGraph(opts ...CallGraphOption) *Graph {
 		opt(flags)
 	}
 
-	g := NewGraph()
+	g := newGraph()
 
 	m.Match(flags.FunDeclPattern, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
 		funDecl := c.Node().(*ast.FuncDecl)
 		callerObj := m.ObjectOf(funDecl.Name)
 		caller := callerObj.(*types.Func)
 
-		g.addNode(caller) // add caller, anyway
+		if flags.ShowOrphanedNode {
+			g.addNode(caller)
+		}
 
 		m.MatchNode(flags.CallExprPattern, funDecl, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
 			callExpr := c.Node().(*ast.CallExpr)
@@ -111,7 +117,7 @@ type Graph struct {
 	Edges map[ID]*Edge
 }
 
-func NewGraph() *Graph {
+func newGraph() *Graph {
 	return &Graph{
 		idMap: make(map[string]ID),
 		Nodes: make(map[ID]*Node),
@@ -174,6 +180,47 @@ digraph callgraph {
 	return Dot(dot.String())
 }
 
+func (g *Graph) SubGraph(rootPred Predicate[*Node]) *Graph {
+	findRoots := func() (roots []ID) {
+		for id, node := range g.Nodes {
+			if rootPred(node) {
+				roots = append(roots, id)
+			}
+		}
+		return
+	}
+
+	type (
+		nodeID = ID
+		edgeID = ID
+		pair   = struct {
+			edgeID
+			nodeID
+		}
+	)
+	edges := map[nodeID][]pair{}
+	for eid, edge := range g.Edges {
+		edges[edge.Source] = append(edges[edge.Source], pair{eid, edge.Target})
+	}
+
+	subGraph := newGraph()
+	var dfs func(nodeID)
+	dfs = func(source nodeID) {
+		if subGraph.Nodes[source] != nil {
+			return
+		}
+		subGraph.Nodes[source] = g.Nodes[source]
+		for _, it := range edges[source] {
+			subGraph.Edges[it.edgeID] = g.Edges[it.edgeID]
+			dfs(it.nodeID)
+		}
+	}
+	for _, root := range findRoots() {
+		dfs(root)
+	}
+	return subGraph
+}
+
 func (g *Graph) getID(fullName string, isNode bool) (id ID, isNew bool) {
 	if id, ok := g.idMap[fullName]; ok {
 		return id, false
@@ -190,7 +237,7 @@ func (g *Graph) getID(fullName string, isNode bool) (id ID, isNew bool) {
 }
 
 func (g *Graph) addNode(fun *types.Func) ID {
-	funcName := g.normalizeFunName(fun.FullName())
+	funcName := g.FunName(fun)
 	fullName := fmt.Sprintf("func ~ %s", funcName)
 	id, isNew := g.getID(fullName, true)
 	if !isNew {
@@ -226,7 +273,7 @@ func (g *Graph) addNode(fun *types.Func) ID {
 		if pkg == nil {
 			return true
 		}
-		buildPkg, _ := build.Import(g.pkgPath(pkg), "", 0)
+		buildPkg, _ := build.Import(g.PkgPath(pkg), "", 0)
 		return buildPkg.Goroot
 	}
 
@@ -257,7 +304,7 @@ func (g *Graph) addStaticEdge(callExpr *ast.CallExpr, caller, callee *types.Func
 	// 	callExpr.Pos(), normalize(caller.FullName()), normalize(callee.FullName()))
 
 	// rm Pos, only addOnce
-	fullName := fmt.Sprintf("call %s -> %s", g.normalizeFunName(caller.FullName()), g.normalizeFunName(callee.FullName()))
+	fullName := fmt.Sprintf("call %s -> %s", g.FunName(caller), g.FunName(callee))
 	id, isNew := g.getID(fullName, true)
 	if !isNew {
 		return id
@@ -280,7 +327,7 @@ func (g *Graph) addRecvTypeNode(recv *types.Var) ID {
 	pkg := recv.Pkg()
 	tyStr := recv.Type().String()
 
-	fullName := fmt.Sprintf("recv ~ %s ~ %s", g.pkgPath(pkg), tyStr)
+	fullName := fmt.Sprintf("recv ~ %s ~ %s", g.PkgPath(pkg), tyStr)
 	id, isNew := g.getID(fullName, true)
 	if !isNew {
 		return id
@@ -319,7 +366,7 @@ func (g *Graph) addPkgNode(pkg *types.Package) ID {
 	if pkg == nil {
 		return ""
 	}
-	pkgPath := g.pkgPath(pkg)
+	pkgPath := g.PkgPath(pkg)
 
 	fullName := fmt.Sprintf("pkg ~ %s", pkgPath)
 	id, isNew := g.getID(fullName, true)
@@ -345,7 +392,7 @@ func (g *Graph) normalizeFunName(id string) string {
 	return strings.ReplaceAll(id, "command-line-arguments.", "")
 }
 
-func (g *Graph) pkgPath(pkg *types.Package) string {
+func (g *Graph) PkgPath(pkg *types.Package) string {
 	if pkg == nil {
 		return ""
 	}
@@ -353,4 +400,8 @@ func (g *Graph) pkgPath(pkg *types.Package) string {
 		return ""
 	}
 	return pkg.Path()
+}
+
+func (g *Graph) FunName(fun *types.Func) string {
+	return g.normalizeFunName(fun.FullName())
 }
