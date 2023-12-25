@@ -147,34 +147,40 @@ digraph callgraph {
 	outputorder=edgesfirst
 	graph[rankdir=LR, center=true]
 	node [color=grey, style=filled, fontname="Sans serif", fontsize=13]
-	// node[shape=none,  fontsize=13]
 	edge[arrowsize=0.6, arrowhead=vee, color=gray]
+
 `)
 
-	for _, node := range g.Nodes {
+	for id, node := range g.Nodes {
 		switch node.Type {
 		case NodeFunc:
 			// isFun := strings.Index(node.Label, ".") == -1
 			f := node.Object.(*types.Func)
 			isFun := f.Type().(*types.Signature).Recv() == nil
+			color, fontSize := "lightpink", 13
 			if isFun {
-				dot.WriteString(fmt.Sprintf("\t\"%s\" [color=lightblue, target=\"_top\"]\n", node.Label))
-			} else {
-				dot.WriteString(fmt.Sprintf("\t\"%s\" [color=lightpink, target=\"_top\"]\n", node.Label))
+				color = "lightblue"
 			}
+			// if f.Exported() { fontSize = 14 }
+			label := node.Label
+			// label += "\n" + strings.Join(node.Attrs, ",")
+			dot.WriteString(fmt.Sprintf("\t%s [label=%q, fontsize=%d, color=%q, target=\"_top\"]\n",
+				id, label, fontSize, color))
 		case NodeRecv:
-			dot.WriteString(fmt.Sprintf("\t\"%s\" [fontcolor=\"#3182bd\", target=\"_top\"]\n", node.Label))
+			color := "#3182bd"
+			dot.WriteString(fmt.Sprintf("\t%s [label=%q, fontcolor=%q, target=\"_top\"]\n",
+				id, node.Label, color))
 		case NodePkg:
-			dot.WriteString(fmt.Sprintf("\t\"%s\" [fontcolor=\"#3182bd\", target=\"_top\"]\n", node.Label))
+			color := "#3182bd"
+			dot.WriteString(fmt.Sprintf("\t%s [label=%q, fontcolor=%q, target=\"_top\"]\n",
+				id, node.Label, color))
 		default:
 			panic("unreached")
 		}
 
 	}
 	for _, edge := range g.Edges {
-		from := g.Nodes[edge.Source].Label
-		to := g.Nodes[edge.Target].Label
-		dot.WriteString(fmt.Sprintf("\t\"%s\" -> \"%s\"\n", from, to))
+		dot.WriteString(fmt.Sprintf("\t%s -> %s\n", edge.Source, edge.Target))
 	}
 	dot.WriteString("}")
 	return Dot(dot.String())
@@ -283,9 +289,6 @@ func (g *Graph) addNode(fun *types.Func) ID {
 	if fun.Parent() == nil {
 		node.Attrs = append(node.Attrs, "global")
 	}
-	if !fun.Exported() {
-		node.Attrs = append(node.Attrs, "unexported")
-	}
 
 	g.Nodes[id] = node
 	return id
@@ -353,9 +356,6 @@ func (g *Graph) addRecvTypeNode(recv *types.Var) ID {
 	}
 	if recv.IsField() {
 		node.Attrs = append(node.Attrs, "field")
-	}
-	if !recv.Exported() {
-		node.Attrs = append(node.Attrs, "unexported")
 	}
 
 	g.Nodes[id] = node
