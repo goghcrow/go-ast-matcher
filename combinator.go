@@ -8,8 +8,6 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
-
-	"golang.org/x/tools/go/types/typeutil"
 )
 
 // Notice:  matched by three layer
@@ -501,7 +499,7 @@ func CalleeOf(m *Matcher, p Predicate[types.Object]) CallExprPattern {
 		if call == nil {
 			return false
 		}
-		callee := typeutil.Callee(m.Info, call)
+		callee := m.ObjectOfCall(call)
 		if callee == nil {
 			return false
 		}

@@ -13,42 +13,44 @@ import (
 	"golang.org/x/tools/go/ast/astutil"
 )
 
-// CallGraph static-ast-based call graph
-func (m *Matcher) CallGraph(
-	callerPattern *ast.FuncDecl,
-	calleeOf Predicate[types.Object],
-) *Graph {
+type CallGraphFlags struct {
+	FunDeclPattern  *ast.FuncDecl
+	CallExprPattern *ast.CallExpr
+}
 
-	var objectOfCall func(m *Matcher, call ast.Expr) types.Object
-	objectOfCall = func(m *Matcher, call ast.Expr) types.Object {
-		switch calleeExpr := call.(type) {
-		case *ast.Ident:
-			return m.ObjectOf(calleeExpr)
-		case *ast.SelectorExpr:
-			sel := m.Selections[calleeExpr]
-			if sel == nil {
-				return nil
-			}
-			// sig := sel.Type().(*types.Signature)
-			return sel.Obj()
-		case *ast.IndexExpr: // generic
-			return objectOfCall(m, calleeExpr.X)
-		}
-		return nil
+type CallGraphOption func(*CallGraphFlags)
+
+func WithCallerPattern(funPtn *ast.FuncDecl) CallGraphOption {
+	return func(flags *CallGraphFlags) { flags.FunDeclPattern = funPtn }
+}
+func WithCallExprPattern(callPtn *ast.CallExpr) CallGraphOption {
+	return func(flags *CallGraphFlags) { flags.CallExprPattern = callPtn }
+}
+
+// CallGraph statical ast-pattern-based call graph
+func (m *Matcher) CallGraph(opts ...CallGraphOption) *Graph {
+	flags := &CallGraphFlags{
+		FunDeclPattern: &ast.FuncDecl{}, // all func decl
+		CallExprPattern: CalleeOf(m, func(obj types.Object) bool {
+			return obj != nil
+		}),
+	}
+	for _, opt := range opts {
+		opt(flags)
 	}
 
 	g := NewGraph()
 
-	callPtn := CalleeOf(m, calleeOf)
-	m.Match(callerPattern, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
+	m.Match(flags.FunDeclPattern, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
 		funDecl := c.Node().(*ast.FuncDecl)
 		callerObj := m.ObjectOf(funDecl.Name)
-		fun := callerObj.(*types.Func)
+		caller := callerObj.(*types.Func)
 
-		m.MatchNode(callPtn, funDecl, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
+		g.addNode(caller) // add caller, anyway
+
+		m.MatchNode(flags.CallExprPattern, funDecl, func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
 			callExpr := c.Node().(*ast.CallExpr)
-			calleeExpr := callExpr.Fun
-			calleeObj := objectOfCall(m, calleeExpr)
+			calleeObj := m.ObjectOfCall(callExpr)
 			if calleeObj == nil {
 				if m.PrintErrors {
 					errLog("empty callee object: " + m.ShowNodeWithPos(c.Node()))
@@ -56,15 +58,13 @@ func (m *Matcher) CallGraph(
 				return
 			}
 
-			switch obj := calleeObj.(type) {
+			switch callee := calleeObj.(type) {
 			case *types.Func:
-				caller := fun
-				callee := obj
 				g.addStaticEdge(callExpr, caller, callee)
 			case *types.Var:
-				caller := fun
-				callee := obj
 				g.addDynamicEdge(callExpr, caller, callee)
+			case *types.Builtin:
+				g.addBuiltinEdge(callExpr, caller, callee)
 			default:
 				panic("unreachable")
 			}
@@ -245,8 +245,11 @@ func (g *Graph) addNode(fun *types.Func) ID {
 }
 
 func (g *Graph) addDynamicEdge(callExpr *ast.CallExpr, caller *types.Func, callee *types.Var) ID {
-	// TODO
-	return ""
+	return "" // TODO
+}
+
+func (g *Graph) addBuiltinEdge(callExpr *ast.CallExpr, caller *types.Func, callee *types.Builtin) ID {
+	return "" // TODO
 }
 
 func (g *Graph) addStaticEdge(callExpr *ast.CallExpr, caller, callee *types.Func) ID {
@@ -261,24 +264,15 @@ func (g *Graph) addStaticEdge(callExpr *ast.CallExpr, caller, callee *types.Func
 	}
 
 	callerId := g.addNode(caller)
-
-	// todo 排除
-	if callee.Name() == "UnwrapErr" {
-		return id
+	calleeId := g.addNode(callee)
+	cEdge := &Edge{
+		ID:     id,
+		Source: callerId,
+		Target: calleeId,
+		Attrs:  []string{"static"}, // todo go / defer / closure call ?
 	}
 
-	if callee.Pkg().Name() == "pkg" {
-		calleeId := g.addNode(callee)
-		cEdge := &Edge{
-			ID:     id,
-			Source: callerId,
-			Target: calleeId,
-			Attrs:  []string{"static"}, // todo go / defer / closure call ?
-		}
-
-		g.Edges[id] = cEdge
-	}
-
+	g.Edges[id] = cEdge
 	return id
 }
 

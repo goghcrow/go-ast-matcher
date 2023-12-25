@@ -13,6 +13,15 @@ import (
 	"golang.org/x/tools/go/ast/astutil"
 )
 
+func CallGraphOfMatcher() {
+	m := NewMatcher("./", PatternAll, WithSuppressErrors())
+	callExprPtn := FuncCalleeOf(m, func(callee *types.Func) bool {
+		return callee.Pkg() != nil && callee.Pkg().Name() == "matcher"
+	})
+	graph := m.CallGraph(WithCallExprPattern(callExprPtn))
+	graph.Dot().OpenOnline()
+}
+
 func PatternOfWildcardIdent(m *Matcher) ast.Node {
 	// bind matched wildcard ident to "var"
 	return Bind(m,

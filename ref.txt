@@ -1,0 +1,27 @@
+https://astexplorer.net/
+
+https://docs.google.com/presentation/d/13OvHYozAUBeISPRoLgG7kMBuja1NsU1D_mMlmbaYojk/view
+
+https://github.com/golang/example/blob/master/gotypes/README.md
+https://github.com/golang/exp/blob/master/typeparams/example/README.md
+
+https://pkg.go.dev/golang.org/x/tools/go/analysis
+https://eli.thegreenplace.net/2020/writing-multi-package-analysis-tools-for-go/
+https://eli.thegreenplace.net/2021/rewriting-go-source-code-with-ast-tooling/
+
+http://golang.org/s/using-guru
+https://pkg.go.dev/golang.org/x/tools/gopls
+
+https://github.com/mvdan/gogrep/issues/64
+https://go-ruleguard.github.io/
+https://github.com/rsc/rf
+https://ast-grep.github.io/
+https://tree-sitter.github.io/tree-sitter/
+
+
+https://go.dev/ref/spec#Uniqueness_of_identifiers
+Uniqueness of identifiers
+Given a set of identifiers, an identifier is called unique if it is different from every other in the set.
+Two identifiers are different if they are spelled differently, or if they appear in different packages and are not exported.
+Otherwise, they are the same.
+

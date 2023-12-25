@@ -12,21 +12,23 @@ import (
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Option ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
-type CallGraphFlags struct {
+type SSACallGraphFlags struct {
 	LoadFlags
 }
 
-type CallGraphOption func(*CallGraphFlags)
+type SSACallGraphOption func(*SSACallGraphFlags)
 
-func WithCallGraphBuildTag(tag string) CallGraphOption {
-	return func(opts *CallGraphFlags) { opts.BuildTag = tag }
+func WithSSACallGraphBuildTag(tag string) SSACallGraphOption {
+	return func(opts *SSACallGraphFlags) { opts.BuildTag = tag }
 }
-func WithCallGraphGopath(gopath string) CallGraphOption {
-	return func(opts *CallGraphFlags) { opts.Gopath = gopath }
+func WithSSACallGraphGopath(gopath string) SSACallGraphOption {
+	return func(opts *SSACallGraphFlags) { opts.Gopath = gopath }
 }
-func WithCallGraphLoadTest() CallGraphOption { return func(opts *CallGraphFlags) { opts.Test = true } }
-func WithCallGraphSuppressErrors() CallGraphOption {
-	return func(opts *CallGraphFlags) { opts.PrintErrors = false }
+func WithSSACallGraphLoadTest() SSACallGraphOption {
+	return func(opts *SSACallGraphFlags) { opts.Test = true }
+}
+func WithSSACallGraphSuppressErrors() SSACallGraphOption {
+	return func(opts *SSACallGraphFlags) { opts.PrintErrors = false }
 }
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ CallGraph ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
@@ -41,7 +43,7 @@ const (
 )
 
 type CallGraph struct {
-	*CallGraphFlags
+	*SSACallGraphFlags
 	*Loader
 
 	Prog  *ssa.Program
@@ -54,15 +56,15 @@ type CallGraph struct {
 func NewCallGraph(
 	dir string,
 	patterns []string,
-	opts ...CallGraphOption,
+	opts ...SSACallGraphOption,
 ) *CallGraph {
-	flags := &CallGraphFlags{}
+	flags := &SSACallGraphFlags{}
 	flags.PrintErrors = true
 	flags.LoadDepts = true // must
 	for _, opt := range opts {
 		opt(flags)
 	}
-	g := &CallGraph{Loader: NewLoader(), CallGraphFlags: flags}
+	g := &CallGraph{Loader: NewLoader(), SSACallGraphFlags: flags}
 	g.Load(dir, patterns, flags.LoadFlags)
 	g.analysis()
 	return g

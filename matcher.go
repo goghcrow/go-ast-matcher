@@ -10,6 +10,7 @@ import (
 
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
+	"golang.org/x/tools/go/types/typeutil"
 )
 
 type (
@@ -1037,6 +1038,10 @@ func (m *Matcher) LookupFieldOrMethod(pkg, typ, fieldOrMethod string) types.Obje
 }
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ etc ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+func (m *Matcher) ObjectOfCall(call *ast.CallExpr) types.Object {
+	return typeutil.Callee(m.Info, call)
+}
 
 func (m *Matcher) Position(pos token.Pos) token.Position {
 	return m.FSet.Position(pos)
