@@ -486,6 +486,22 @@ func SliceLenLE[T SlicePattern](m *Matcher, n int) T {
 	return SliceLenOf[T](m, func(len int) bool { return len >= n })
 }
 
+// ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ FuncDecl Combinators ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+func FuncDeclOf(m *Matcher, p Predicate[*types.Func]) *ast.FuncDecl {
+	return &ast.FuncDecl{
+		Name: IdentObjectOf(m, func(obj types.Object) bool {
+			return p(obj.(*types.Func))
+		}),
+	}
+}
+
+func FuncFullNameOf(m *Matcher, name string) *ast.FuncDecl {
+	return FuncDeclOf(m, func(ft *types.Func) bool {
+		return FunName(ft) == name
+	})
+}
+
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Callee Combinators ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 // ref testdata/match/callee.txt
 

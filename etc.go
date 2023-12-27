@@ -64,6 +64,22 @@ func LocOfPos(fset *token.FileSet, pos token.Pos) string {
 	return " at " + fset.Position(pos).String()
 }
 
+// ↓↓↓↓↓↓↓↓↓↓↓↓ Normalize ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+func PkgPath(pkg *types.Package) string {
+	if pkg == nil {
+		return ""
+	}
+	if pkg.Path() == "command-line-arguments" {
+		return ""
+	}
+	return pkg.Path()
+}
+
+func FunName(fun *types.Func) string {
+	return strings.ReplaceAll(fun.FullName(), "command-line-arguments.", "")
+}
+
 // ↓↓↓↓↓↓↓↓↓↓↓↓ Is ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 // IsNilNode for typed-nil problem

@@ -388,20 +388,10 @@ func (g *Graph) addPkgNode(pkg *types.Package) ID {
 	return id
 }
 
-func (g *Graph) normalizeFunName(id string) string {
-	return strings.ReplaceAll(id, "command-line-arguments.", "")
-}
-
 func (g *Graph) PkgPath(pkg *types.Package) string {
-	if pkg == nil {
-		return ""
-	}
-	if pkg.Path() == "command-line-arguments" {
-		return ""
-	}
-	return pkg.Path()
+	return PkgPath(pkg)
 }
 
 func (g *Graph) FunName(fun *types.Func) string {
-	return g.normalizeFunName(fun.FullName())
+	return FunName(fun)
 }
