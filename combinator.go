@@ -131,6 +131,10 @@ func combineEx[T Pattern](m *Matcher, a, b ast.Node, bin Binary[MatchFun]) T {
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Object Combinators ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
+// ObjectOf
+// notice: can not be used for `f` or `a.b` in `f[T]()` `a.b[T]()`
+// unpacking index/indexList is needed firstly
+// please use XXX CalleeOf
 func ObjectOf(m *Matcher, p Predicate[types.Object]) ExprPattern {
 	return OrEx[ExprPattern](m,
 		IdentObjectOf(m, p),

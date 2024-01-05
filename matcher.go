@@ -1007,6 +1007,12 @@ func (m *Matcher) Lookup(qualifiedName string) types.Object {
 	return p.Types.Scope().Lookup(id)
 }
 
+func (m *Matcher) MustLookup(qualifiedName string) types.Object {
+	obj := m.Lookup(qualifiedName)
+	assert(obj != nil, "object not found: "+qualifiedName)
+	return obj
+}
+
 // Lookups name in current package and all imported packages
 func (m *Matcher) Lookups(name string) []types.Object {
 	pkg := m
