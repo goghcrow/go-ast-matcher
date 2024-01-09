@@ -48,6 +48,7 @@ type LoadFlags struct {
 }
 
 type Loader struct {
+	Cfg       *packages.Config
 	FSet      *token.FileSet
 	Init      []*packages.Package
 	All       map[PackageID]*packages.Package
@@ -75,7 +76,7 @@ func (d *Loader) Load(dir string, patterns []string, flags LoadFlags) {
 	dir, err := filepath.Abs(dir)
 	panicIfErr(err)
 
-	cfg := &packages.Config{
+	d.Cfg = &packages.Config{
 		Fset:       d.FSet,
 		Mode:       mode,
 		Tests:      flags.Test,
@@ -83,11 +84,10 @@ func (d *Loader) Load(dir string, patterns []string, flags LoadFlags) {
 		BuildFlags: []string{"-tags=" + flags.BuildTag},
 	}
 	if flags.Gopath != "" {
-		cfg.Env = append(os.Environ(), "GOPATH="+flags.Gopath)
+		d.Cfg.Env = append(os.Environ(), "GOPATH="+flags.Gopath)
 	}
-
 	patterns = append(patterns)
-	d.Init, err = packages.Load(cfg, patterns...)
+	d.Init, err = packages.Load(d.Cfg, patterns...)
 	panicIfErr(err)
 
 	if len(d.Init) == 0 {
