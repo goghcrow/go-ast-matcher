@@ -1066,7 +1066,11 @@ func (m *Matcher) ShowNodeWithPos(n ast.Node) string {
 }
 
 func (m *Matcher) WriteFile(filename string, f *ast.File) {
-	WriteFile(m.FSet, filename, f)
+	WriteFile(m.FSet, filename, f, "")
+}
+
+func (m *Matcher) WriteFileWithComment(filename string, f *ast.File, comment string) {
+	WriteFile(m.FSet, filename, f, comment)
 }
 
 func (m *Matcher) FormatFile(f *ast.File) string {
