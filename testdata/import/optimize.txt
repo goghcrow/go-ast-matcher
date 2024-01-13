@@ -1,0 +1,137 @@
+optimize import
+-- main.go --
+package main
+
+import (
+    . "a.b.c/company/a"
+    "a.b.c/project/x"
+    "a.b.c/company/b"
+    B "a.b.c/company/b"
+    Y1 "a.b.c/project/y"
+    "fmt"
+)
+
+import (
+    . "a.b.c/company/a"
+    "a.b.c/project/x"
+    B "a.b.c/company/b"
+    Y2 "a.b.c/project/y"
+    "fmt"
+)
+
+import (
+    "a.b.c/company/c"
+    _ "a.b.c/project/z"
+    _ "a.b.c/project/z"
+    time1 "time"
+)
+
+import (
+    "a.b.c/company/c"
+    _ "a.b.c/project/z"
+    _ "a.b.c/project/z"
+    time2 "time"
+)
+
+import "os"
+import "os"
+
+type T struct {
+    b.T
+    y B.T
+}
+
+func main() {
+    A()
+    // B.B()
+    c.C()
+    // x.X()
+    Y1.Y()
+    Y2.Y()
+    // z.Z()
+    fmt.Println()
+    time1.Sleep(time.Second)
+    time2.Sleep(time.Second)
+    // os.Exit(0)
+}
+
+-- company/a/a.go --
+package a
+
+func A() {}
+
+-- company/b/b.go --
+package b
+
+type T int
+func B() {}
+
+-- company/c/c.go --
+package c
+
+func C() {}
+
+
+-- project/x/x.go --
+package x
+
+func X() {}
+
+-- project/y/y.go --
+package y
+
+func Y() {}
+
+-- project/z/z.go --
+package z
+
+func Z() {}
+
+
+-- main.go.optimized --
+package main
+
+import (
+	"fmt"
+
+	. "a.b.c/company/a"
+	"a.b.c/company/b"
+	B "a.b.c/company/b"
+
+	Y1 "a.b.c/project/y"
+)
+
+import (
+	Y2 "a.b.c/project/y"
+)
+
+import (
+	time1 "time"
+
+	"a.b.c/company/c"
+
+	_ "a.b.c/project/z"
+)
+
+import (
+	time2 "time"
+)
+
+type T struct {
+	b.T
+	y B.T
+}
+
+func main() {
+	A()
+	// B.B()
+	c.C()
+	// x.X()
+	Y1.Y()
+	Y2.Y()
+	// z.Z()
+	fmt.Println()
+	time1.Sleep(time.Second)
+	time2.Sleep(time.Second)
+	// os.Exit(0)
+}

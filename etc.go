@@ -9,7 +9,6 @@ import (
 	"go/types"
 	"os"
 	"reflect"
-	"strconv"
 	"strings"
 
 	"golang.org/x/tools/go/ast/astutil"
@@ -111,25 +110,6 @@ func IsNilType(ty types.Type) bool {
 		return true
 	}
 	return false
-}
-
-// ↓↓↓↓↓↓↓↓↓↓↓↓ Package ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
-
-// func trimPkgPath(pkg string) string {
-// 	xs := strings.Split(pkg, " ")
-// 	if len(xs) > 1 {
-// 		return strings.Trim(xs[1], `"`)
-// 	}
-// 	return strings.Trim(pkg, `"`)
-// }
-
-func trimPkgPath(pkg string) string {
-	pkg, _ = strconv.Unquote(pkg)
-	xs := strings.Split(pkg, " ")
-	if len(xs) > 1 {
-		return xs[1]
-	}
-	return pkg
 }
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓ BuildTag ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓

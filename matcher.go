@@ -176,7 +176,7 @@ func (m *Matcher) visitPkgImports(
 			for _, spec := range d.Specs {
 				iSpec := spec.(*ast.ImportSpec)
 				name := iSpec.Name
-				path := trimPkgPath(iSpec.Path.Value)
+				path := ImportPath(iSpec)
 				f(name, path)
 			}
 		}
@@ -1111,4 +1111,20 @@ func (m *Matcher) SortImports(
 	companyPkgPrefix []string,
 ) {
 	SortImports(f, projectPkgPrefix, companyPkgPrefix)
+}
+
+func (m *Matcher) ClearImports(
+	f *ast.File,
+	projectPkgPrefix string,
+	companyPkgPrefix []string,
+) {
+	CleanImports(m, f)
+}
+
+func (m *Matcher) OptimiseImports(
+	f *ast.File,
+	projectPkgPrefix string,
+	companyPkgPrefix []string,
+) {
+	OptimizeImports(m, f, projectPkgPrefix, companyPkgPrefix)
 }

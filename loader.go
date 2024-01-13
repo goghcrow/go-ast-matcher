@@ -11,7 +11,7 @@ import (
 )
 
 type (
-	PackageID   = string
+	PackagePath = string
 	FileName    = string
 	GeneratedBy = string
 )
@@ -51,7 +51,7 @@ type Loader struct {
 	Cfg       *packages.Config
 	FSet      *token.FileSet
 	Init      []*packages.Package
-	All       map[PackageID]*packages.Package
+	All       map[PackagePath]*packages.Package
 	Generated map[string]string
 }
 
@@ -59,7 +59,7 @@ func NewLoader() *Loader {
 	return &Loader{
 		FSet:      token.NewFileSet(),
 		Init:      []*packages.Package{},
-		All:       map[PackageID]*packages.Package{},
+		All:       map[PackagePath]*packages.Package{},
 		Generated: map[FileName]GeneratedBy{},
 	}
 }
@@ -102,7 +102,7 @@ func (d *Loader) Load(dir string, patterns []string, flags LoadFlags) {
 		}
 
 		// Gather all packages
-		d.All[p.ID] = p
+		d.All[p.PkgPath] = p
 
 		// Gather generated files
 		for _, file := range p.Syntax {

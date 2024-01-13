@@ -4,30 +4,211 @@ import (
 	"encoding/json"
 	"go/ast"
 	"go/token"
+	"go/types"
 	"sort"
+	"strconv"
 	"strings"
 
+	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
 )
 
-// ↓↓↓↓↓↓↓↓↓↓↓↓ sort import block ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+// ↓↓↓↓↓↓↓↓↓↓↓↓ uses import ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+func UsesImport(m *Matcher, file *ast.File, pkg *types.Package) (use bool) {
+	if ImportsAs(file, "_", pkg.Path()) {
+		return true
+	}
+
+	usePkg := func(id *ast.Ident) bool {
+		switch obj := m.ObjectOf(id).(type) {
+		case nil:
+			return false
+		case *types.PkgName:
+			return obj.Imported() == pkg
+		default:
+			return obj.Pkg() == pkg
+		}
+	}
+
+	astutil.Apply(file, nil, func(c *astutil.Cursor) bool {
+		n := c.Node()
+		switch n := n.(type) {
+		case *ast.Ident:
+			use = usePkg(n)
+		case *ast.SelectorExpr:
+			use = usePkg(n.Sel)
+		case *ast.Field:
+			for _, name := range n.Names {
+				use = usePkg(name)
+				if use {
+					break
+				}
+			}
+		}
+		return !use // stop walking
+	})
+	return
+}
+
+// ↓↓↓↓↓↓↓↓↓↓↓↓ uses import ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+func OptimizeImports(
+	m *Matcher,
+	file *ast.File,
+	projectPkgPrefix string,
+	companyPkgPrefix []string,
+) {
+	CleanImports(m, file)
+	SortImports(file, projectPkgPrefix, companyPkgPrefix)
+}
+
+// ↓↓↓↓↓↓↓↓↓↓↓↓ clean unused import ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+// CleanImports dedup and remove unused
+func CleanImports(m *Matcher, file *ast.File) {
+	i := &importCleaner{
+		m:         m,
+		file:      file,
+		importMap: map[PackagePath]*packages.Package{},
+		useMap:    map[PackagePath]bool{},
+		dedup:     map[string]bool{},
+	}
+
+	i.imports()
+	i.uses()
+	i.rebuild()
+}
+
+type importCleaner struct {
+	m         *Matcher
+	file      *ast.File
+	importMap map[PackagePath]*packages.Package
+	useMap    map[PackagePath]bool
+	dedup     map[string]bool
+}
+
+func (i *importCleaner) imports() {
+	walkImportGroup(i.file, func(d *ast.GenDecl) {
+		for _, spec := range d.Specs {
+			s := spec.(*ast.ImportSpec)
+			path := ImportPath(s)
+			pkg, ok := i.m.All[path]
+			assert(ok, path+" not loaded, missing matcher.WithLoadDepts() ?")
+			i.importMap[path] = pkg
+		}
+	})
+}
+
+func (i *importCleaner) uses() {
+	walkImportGroup(i.file, func(d *ast.GenDecl) {
+		for _, spec := range d.Specs {
+			s := spec.(*ast.ImportSpec)
+			path := ImportPath(s)
+			if s.Name.String() == "_" {
+				i.useMap[path] = true
+			}
+		}
+	})
+
+	astutil.Apply(i.file, nil, func(c *astutil.Cursor) bool {
+		n := c.Node()
+		switch n := n.(type) {
+		case *ast.Ident:
+			i.markUses(n)
+		case *ast.SelectorExpr:
+			i.markUses(n.Sel)
+		case *ast.Field:
+			for _, name := range n.Names {
+				i.markUses(name)
+			}
+		}
+		return true
+	})
+}
+
+func (i *importCleaner) markUses(id *ast.Ident) {
+	switch obj := i.m.ObjectOf(id).(type) {
+	case nil:
+		return
+	case *types.PkgName: // pkgName.xxx
+		assert(obj.Pkg() == i.m.Package, "illegal state")
+		pkg := obj.Imported()
+		path := pkg.Path()
+		if imported, ok := i.importMap[path]; ok {
+			assert(pkg == imported.Types, "illegal state")
+			i.useMap[path] = true
+		}
+	default: // import . "xxxx"
+		selfPkg := obj.Pkg() == i.m.Package
+		if selfPkg || obj.Pkg() == nil {
+			return
+		}
+		path := obj.Pkg().Path()
+		// !ok e.g. a.b.c, c in other pkg, no need importing
+		if pkg, ok := i.importMap[path]; ok {
+			assert(obj.Pkg() == pkg.Types, "illegal state")
+			i.useMap[path] = true
+		}
+	}
+}
+
+func (i *importCleaner) rebuild() {
+	walkImportGroup(i.file, func(d *ast.GenDecl) {
+		specs := make([]ast.Spec, 0, len(d.Specs))
+		for _, spec := range d.Specs {
+			s := spec.(*ast.ImportSpec)
+			name := ImportName(s)
+			path := ImportPath(s)
+			if i.keepImport(name, path) {
+				namePath := FmtImport(s)
+				s := &ast.ImportSpec{Path: &ast.BasicLit{Value: namePath, Kind: d.Tok}}
+				specs = append(specs, s)
+			}
+		}
+
+		d.Specs = specs
+	})
+
+	i.clearEmptyDecl()
+}
+
+func (i *importCleaner) keepImport(name, path string) bool {
+	id := name + "#" + path
+	use := i.useMap[path]
+	dup := i.dedup[id]
+	if !use || dup {
+		return false
+	}
+	i.dedup[id] = true
+	return true
+}
+
+func (i *importCleaner) clearEmptyDecl() {
+	xs := make([]ast.Decl, 0, len(i.file.Decls))
+	for _, decl := range i.file.Decls {
+		d, ok := decl.(*ast.GenDecl)
+		if !ok || d.Tok != token.IMPORT || len(d.Specs) > 0 {
+			xs = append(xs, decl)
+		}
+	}
+	i.file.Decls = xs
+}
+
+// ↓↓↓↓↓↓↓↓↓↓↓↓ sort import ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 func SortImports(
 	file *ast.File,
 	projectPkgPrefix string,
 	companyPkgPrefix []string,
 ) {
-	for _, decl := range file.Decls {
-		d, ok := decl.(*ast.GenDecl)
-		if !ok || d.Tok != token.IMPORT {
-			continue
-		}
+	walkImportGroup(file, func(d *ast.GenDecl) {
 		// only sort imports in block
 		if !d.Lparen.IsValid() {
-			continue
+			return
 		}
 
-		i := &imports{
+		i := &importSorter{
 			decl:             d,
 			projectPkgPrefix: projectPkgPrefix,
 			companyPkgPrefix: companyPkgPrefix,
@@ -35,10 +216,10 @@ func SortImports(
 		i.collect()
 		i.sort()
 		i.rebuild()
-	}
+	})
 }
 
-type imports struct {
+type importSorter struct {
 	decl *ast.GenDecl
 
 	projectPkgPrefix string
@@ -50,53 +231,47 @@ type imports struct {
 	project []string
 }
 
-func (i *imports) collect() {
+func (i *importSorter) collect() {
 	for _, spec := range i.decl.Specs {
-		iSpec := spec.(*ast.ImportSpec)
-		pkg := trimPkgPath(iSpec.Path.Value)
-		decl := i.fmtImport(iSpec)
-		if i.isStd(pkg) {
-			i.std = append(i.std, decl)
-		} else if i.isCompany(pkg) {
-			i.company = append(i.company, decl)
-		} else if i.isProject(pkg) {
-			i.project = append(i.project, decl)
+		s := spec.(*ast.ImportSpec)
+		path := ImportPath(s)
+		namePath := FmtImport(s)
+		if i.isStd(path) {
+			i.std = append(i.std, namePath)
+		} else if i.isCompany(path) {
+			i.company = append(i.company, namePath)
+		} else if i.isProject(path) {
+			i.project = append(i.project, namePath)
 		} else {
-			i.other = append(i.other, decl)
+			i.other = append(i.other, namePath)
 		}
 	}
 }
 
-func (i *imports) sort() {
+func (i *importSorter) sort() {
 	sort.Strings(i.std)
 	sort.Strings(i.other)
 	sort.Strings(i.company)
 	sort.Strings(i.project)
 }
 
-func (i *imports) isStd(pkg string) bool     { return stdPkg[pkg] }
-func (i *imports) isProject(pkg string) bool { return strings.HasPrefix(pkg, i.projectPkgPrefix) }
-func (i *imports) isCompany(pkg string) bool {
+func (i *importSorter) isStd(pkg string) bool     { return stdPkg[pkg] }
+func (i *importSorter) isProject(pkg string) bool { return strings.HasPrefix(pkg, i.projectPkgPrefix) }
+func (i *importSorter) isCompany(pkg string) bool {
 	for _, prefix := range i.companyPkgPrefix {
-		if strings.HasPrefix(pkg, prefix) && !strings.HasPrefix(pkg, i.projectPkgPrefix) {
+		if strings.HasPrefix(pkg, prefix) &&
+			!strings.HasPrefix(pkg, i.projectPkgPrefix) {
 			return true
 		}
 	}
 	return false
 }
 
-func (i *imports) fmtImport(spec *ast.ImportSpec) string {
-	if spec.Name == nil {
-		return spec.Path.Value
-	}
-	return spec.Name.Name + " " + spec.Path.Value
-}
-
-func (i *imports) sorting() [][]string {
+func (i *importSorter) sorting() [][]string {
 	return [][]string{i.std, i.other, i.company, i.project}
 }
 
-func (i *imports) rebuild() {
+func (i *importSorter) rebuild() {
 	var specs []ast.Spec
 
 	sorting := i.sorting()
@@ -107,13 +282,95 @@ func (i *imports) rebuild() {
 			})
 		}
 		if len(xs) != 0 && j != len(sorting)-1 {
-			specs = append(specs, &ast.ImportSpec{
-				Path: &ast.BasicLit{Value: "", Kind: token.STRING},
-			})
+			s := &ast.ImportSpec{Path: &ast.BasicLit{Value: "", Kind: token.STRING}}
+			specs = append(specs, s)
 		}
 	}
 
 	i.decl.Specs = specs
+}
+
+// ↓↓↓↓↓↓↓↓↓↓↓↓ etc ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+func walkImportGroup(file *ast.File, f func(*ast.GenDecl)) {
+	for _, decl := range file.Decls {
+		d, ok := decl.(*ast.GenDecl)
+		if !ok || d.Tok != token.IMPORT {
+			continue
+		}
+		f(d)
+	}
+}
+
+func ImportLocal(f *ast.File, path string, pkgName string) (local string, imported bool) {
+	spec := ImportSpec(f, path)
+	if spec == nil {
+		return
+	}
+
+	name := spec.Name.String()
+	switch name {
+	case "<nil>":
+		return pkgName, true
+	case ".", "_":
+		return name, true
+	}
+	return
+}
+
+func ImportsAs(f *ast.File, name, path string) bool {
+	for _, s := range f.Imports {
+		if ImportPath(s) == path {
+			return s.Name.String() == name
+		}
+	}
+	return false
+}
+
+func Imports(f *ast.File, path string) bool {
+	return ImportSpec(f, path) != nil
+}
+
+func ImportSpec(f *ast.File, path string) *ast.ImportSpec {
+	for _, s := range f.Imports {
+		if ImportPath(s) == path {
+			return s
+		}
+	}
+	return nil
+}
+
+func ImportPath(s *ast.ImportSpec) string {
+	// for unparsed: ast.File.Decls.Specs(ImportSpec).Path.Value
+	// for parsed: ast.File.Imports
+	path := s.Path.Value
+	xs := strings.Split(path, " ")
+	if len(xs) > 1 {
+		path = xs[1]
+	}
+	t, err := strconv.Unquote(path)
+	panicIfErr(err)
+	return t
+}
+
+func ImportName(s *ast.ImportSpec) string {
+	name := s.Name.String()
+	xs := strings.Split(s.Path.Value, " ")
+	if len(xs) > 1 {
+		assert(name == "<nil>", "illegal state")
+		name = xs[0]
+	}
+	if name == "<nil>" {
+		return ""
+	}
+	return name
+}
+
+func FmtImport(s *ast.ImportSpec) string {
+	if s.Name == nil {
+		return s.Path.Value
+	}
+	return s.Name.Name + " " + s.Path.Value
 }
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓ std Packages ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓

@@ -1,0 +1,98 @@
+optimize import
+-- main.go --
+package main
+
+import (
+    "a.b.c/company/a"
+    "a.b.c/project/x"
+    B "a.b.c/company/b"
+    Y "a.b.c/project/y"
+    "fmt"
+)
+
+import (
+    "a.b.c/company/c"
+    "a.b.c/project/z"
+    "time"
+)
+
+import "os"
+
+func main() {
+    a.A()
+    B.B()
+    c.C()
+    x.X()
+    Y.Y()
+    z.Z()
+    fmt.Println()
+    time.Sleep(time.Second)
+    os.Exit(0)
+}
+
+-- company/a/a.go --
+package a
+
+func A() {}
+
+-- company/b/b.go --
+package b
+
+func B() {}
+
+-- company/c/c.go --
+package c
+
+func C() {}
+
+
+-- project/x/x.go --
+package x
+
+func X() {}
+
+-- project/y/y.go --
+package y
+
+func Y() {}
+
+-- project/z/z.go --
+package z
+
+func Z() {}
+
+
+-- main.go.optimized --
+package main
+
+import (
+	"fmt"
+
+	"a.b.c/company/a"
+	B "a.b.c/company/b"
+
+	"a.b.c/project/x"
+	Y "a.b.c/project/y"
+)
+
+import (
+	"time"
+
+	"a.b.c/company/c"
+
+	"a.b.c/project/z"
+)
+
+import "os"
+
+func main() {
+	a.A()
+	B.B()
+	c.C()
+	x.X()
+	Y.Y()
+	z.Z()
+	fmt.Println()
+	time.Sleep(time.Second)
+	os.Exit(0)
+}
