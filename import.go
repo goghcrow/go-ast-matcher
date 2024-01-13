@@ -32,6 +32,9 @@ func UsesImport(m *Matcher, file *ast.File, pkg *types.Package) (use bool) {
 	}
 
 	astutil.Apply(file, nil, func(c *astutil.Cursor) bool {
+		if _, is := c.Parent().(*ast.ImportSpec); is {
+			return true
+		}
 		n := c.Node()
 		switch n := n.(type) {
 		case *ast.Ident:
@@ -112,6 +115,9 @@ func (i *importCleaner) uses() {
 	})
 
 	astutil.Apply(i.file, nil, func(c *astutil.Cursor) bool {
+		if _, is := c.Parent().(*ast.ImportSpec); is {
+			return true
+		}
 		n := c.Node()
 		switch n := n.(type) {
 		case *ast.Ident:
