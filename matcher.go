@@ -1128,3 +1128,7 @@ func (m *Matcher) OptimiseImports(
 ) {
 	OptimizeImports(m, f, projectPkgPrefix, companyPkgPrefix)
 }
+
+func (m *Matcher) UsesImport(pkg *types.Package) bool {
+	return UsesImport(m, m.File, pkg)
+}
