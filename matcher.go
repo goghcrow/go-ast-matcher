@@ -1093,40 +1093,28 @@ func (m *Matcher) ShowNodeWithPos(n ast.Node) string {
 	return m.ShowNode(n) + "\nat " + m.ShowPos(n)
 }
 
-func (m *Matcher) WriteFile(filename string, f *ast.File) {
-	WriteFile(m.FSet, filename, f, "")
+func (m *Matcher) WriteFile(filename string) {
+	WriteFile(m.FSet, filename, m.File, "")
 }
 
-func (m *Matcher) WriteFileWithComment(filename string, f *ast.File, comment string) {
-	WriteFile(m.FSet, filename, f, comment)
+func (m *Matcher) WriteFileWithComment(filename string, comment string) {
+	WriteFile(m.FSet, filename, m.File, comment)
 }
 
-func (m *Matcher) FormatFile(f *ast.File) string {
-	return string(FmtFile(m.FSet, f))
+func (m *Matcher) FormatFile() string {
+	return string(FmtFile(m.FSet, m.File))
 }
 
-func (m *Matcher) SortImports(
-	f *ast.File,
-	projectPkgPrefix string,
-	companyPkgPrefix []string,
-) {
-	SortImports(f, projectPkgPrefix, companyPkgPrefix)
+func (m *Matcher) ClearImports() {
+	CleanImports(m, m.File)
 }
 
-func (m *Matcher) ClearImports(
-	f *ast.File,
-	projectPkgPrefix string,
-	companyPkgPrefix []string,
-) {
-	CleanImports(m, f)
+func (m *Matcher) SortImports(projectPkgPrefix string, companyPkgPrefix []string) {
+	SortImports(m.File, projectPkgPrefix, companyPkgPrefix)
 }
 
-func (m *Matcher) OptimiseImports(
-	f *ast.File,
-	projectPkgPrefix string,
-	companyPkgPrefix []string,
-) {
-	OptimizeImports(m, f, projectPkgPrefix, companyPkgPrefix)
+func (m *Matcher) OptimiseImports(projectPkgPrefix string, companyPkgPrefix []string) {
+	OptimizeImports(m, m.File, projectPkgPrefix, companyPkgPrefix)
 }
 
 func (m *Matcher) UsesImport(pkg *types.Package) bool {

@@ -117,7 +117,7 @@ func TestRewriteRun(t *testing.T) {
 			name := filepath.Base(m.Filename)
 			t.Run(testFile+"/"+name, func(t *testing.T) {
 				m.MatchNode(testCase.match(m), file, testCase.rewrite)
-				have := m.FormatFile(file)
+				have := m.FormatFile()
 				want := wants[name+".stdout"]
 				if strings.TrimSpace(want) != strings.TrimSpace(have) {
 					diff := Diff("have.go", []byte(have), "want.go", []byte(want))
