@@ -106,34 +106,60 @@ func NewMatcher(
 	return m
 }
 
-func (m *Matcher) setPkg(pkg *packages.Package) {
+func (m *Matcher) withPkg(pkg *packages.Package, f func()) {
+	type pkgInfo struct {
+		pkg    *packages.Package
+		tyPkg  *types.Package
+		tyInfo *types.Info
+	}
+	ori := pkgInfo{m.Pkg, m.Package, m.Info}
+	defer func() {
+		m.Pkg = ori.pkg
+		m.Package = ori.tyPkg
+		m.Info = ori.tyInfo
+	}()
+
 	m.Pkg = pkg
 	m.Info = pkg.TypesInfo
 	m.Package = pkg.Types
+
+	f()
 }
 
-func (m *Matcher) setFile(filename string, file *ast.File) {
+func (m *Matcher) withFile(filename string, file *ast.File, f func()) {
+	type fileInfo struct {
+		file *ast.File
+		name string
+	}
+	ori := fileInfo{m.File, m.Filename}
+	defer func() {
+		m.File = ori.file
+		m.Filename = ori.name
+	}()
+
 	m.Filename = filename
 	m.File = file
+
+	f()
 }
 
 func (m *Matcher) visitPkgFiles(pkg *packages.Package, f func(m *Matcher, file *ast.File)) {
 	for i, filename := range pkg.CompiledGoFiles {
 		file := pkg.Syntax[i]
-		m.setFile(filename, file)
-
-		genBy := m.Generated[filename]
-		isGen := genBy != ""
-		hasGenFilter := m.genFilter != nil
-		if isGen && hasGenFilter {
-			if !m.genFilter(filename, genBy, file) {
-				continue
+		m.withFile(filename, file, func() {
+			genBy := m.Generated[filename]
+			isGen := genBy != ""
+			hasGenFilter := m.genFilter != nil
+			if isGen && hasGenFilter {
+				if !m.genFilter(filename, genBy, file) {
+					return
+				}
 			}
-		}
 
-		if m.fileFilter == nil || m.fileFilter(filename, m.File) {
-			f(m, m.File)
-		}
+			if m.fileFilter == nil || m.fileFilter(filename, m.File) {
+				f(m, m.File)
+			}
+		})
 	}
 }
 
@@ -162,8 +188,9 @@ func (m *Matcher) visitPkgImports(
 func (m *Matcher) VisitAllFiles(f func(m *Matcher, file *ast.File)) {
 	for _, pkg := range m.Init {
 		if m.pkgFilter == nil || m.pkgFilter(pkg) {
-			m.setPkg(pkg)
-			m.visitPkgFiles(pkg, f)
+			m.withPkg(pkg, func() {
+				m.visitPkgFiles(pkg, f)
+			})
 		}
 	}
 }
@@ -197,8 +224,9 @@ func (m *Matcher) VisitAllPackages(
 	}
 	for _, pkg := range m.Init {
 		if m.pkgFilter == nil || m.pkgFilter(pkg) {
-			m.setPkg(pkg)
-			visit(pkg)
+			m.withPkg(pkg, func() {
+				visit(pkg)
+			})
 		}
 	}
 }
