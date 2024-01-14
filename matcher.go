@@ -61,6 +61,11 @@ func WithSkipGenerated() MatchOption {
 		}
 	}
 }
+func skipTestMain() MatchOption {
+	return WithGenFilter(func(_ string, gen GeneratedBy, _ *ast.File) bool {
+		return gen != "by 'go test'."
+	})
+}
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Matcher ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
@@ -96,6 +101,7 @@ func NewMatcher(
 	patterns []string,
 	opts ...MatchOption,
 ) *Matcher {
+	opts = append(opts, skipTestMain())
 	flags := &MatchFlags{}
 	flags.PrintErrors = true
 	for _, opt := range opts {
@@ -1099,6 +1105,10 @@ func (m *Matcher) WriteFile(filename string) {
 
 func (m *Matcher) WriteFileWithComment(filename string, comment string) {
 	WriteFile(m.FSet, filename, m.File, comment)
+}
+
+func (m *Matcher) WriteGeneratedFile(filename string, genBy string) {
+	WriteGeneratedFile(m.FSet, filename, m.File, genBy)
 }
 
 func (m *Matcher) FormatFile() string {
