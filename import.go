@@ -308,22 +308,6 @@ func walkImportGroup(file *ast.File, f func(*ast.GenDecl)) {
 	}
 }
 
-func ImportLocal(f *ast.File, path string, pkgName string) (local string, imported bool) {
-	spec := ImportSpec(f, path)
-	if spec == nil {
-		return
-	}
-
-	name := spec.Name.String()
-	switch name {
-	case "<nil>":
-		return pkgName, true
-	case ".", "_":
-		return name, true
-	}
-	return
-}
-
 func ImportsAs(f *ast.File, name, path string) bool {
 	for _, s := range f.Imports {
 		if ImportPath(s) == path {
@@ -370,6 +354,23 @@ func ImportName(s *ast.ImportSpec) string {
 		return ""
 	}
 	return name
+}
+
+func ParseImportName(f *ast.File, path string, pkgName string) (name string, imported bool) {
+	spec := ImportSpec(f, path)
+	if spec == nil {
+		return
+	}
+
+	name = spec.Name.String()
+	switch name {
+	case "<nil>":
+		return pkgName, true
+	case ".", "_":
+		return name, true
+	default:
+		return name, true
+	}
 }
 
 func FmtImport(s *ast.ImportSpec) string {
