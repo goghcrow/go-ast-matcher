@@ -356,21 +356,16 @@ func ImportName(s *ast.ImportSpec) string {
 	return name
 }
 
-func ParseImportName(f *ast.File, path string, pkgName string) (name string, imported bool) {
+func ParseImportName(f *ast.File, path string, pkgName string) (name string) {
 	spec := ImportSpec(f, path)
 	if spec == nil {
 		return
 	}
-
 	name = spec.Name.String()
-	switch name {
-	case "<nil>":
-		return pkgName, true
-	case ".", "_":
-		return name, true
-	default:
-		return name, true
+	if name == "<nil>" {
+		return ""
 	}
+	return
 }
 
 func FmtImport(s *ast.ImportSpec) string {
