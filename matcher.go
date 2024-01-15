@@ -182,7 +182,7 @@ func (m *Matcher) visitPkgImports(
 			for _, spec := range d.Specs {
 				iSpec := spec.(*ast.ImportSpec)
 				name := iSpec.Name
-				path := ImportPath(iSpec)
+				path := ImportSpecPath(iSpec)
 				f(name, path)
 			}
 		}

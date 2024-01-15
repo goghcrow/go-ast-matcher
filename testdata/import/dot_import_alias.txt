@@ -1,0 +1,38 @@
+dot import type alias
+-- main.go --
+package main
+
+import (
+	. "a.b.c/a"
+)
+
+func main() {
+	println(B{Field: 42})
+}
+
+-- a/a.go --
+package a
+
+import (
+	"a.b.c/b"
+)
+
+type B = b.B
+
+-- b/b.go --
+package b
+
+type B struct {
+    Field int
+}
+
+-- main.go.optimized --
+package main
+
+import (
+	. "a.b.c/a"
+)
+
+func main() {
+	println(B{Field: 42})
+}

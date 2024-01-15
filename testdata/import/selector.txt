@@ -1,0 +1,63 @@
+selector
+-- main.go --
+package main
+
+import (
+	"a.b.c/a"
+)
+
+func main() {
+	a.Func()
+}
+
+-- a/a.go --
+package a
+
+import (
+	"fmt"
+
+	"a.b.c/b"
+	"a.b.c/c"
+	cc "a.b.c/c"
+)
+
+type A struct {
+	B b.B
+}
+
+func Func() {
+	fmt.Println(A{}.B.C.V)
+}
+
+-- b/b.go --
+package b
+
+import "a.b.c/c"
+
+type B struct {
+	C c.C
+}
+
+-- c/c.go --
+package c
+
+type C struct {
+	V int
+}
+
+-- a/a.go.optimized --
+package a
+
+import (
+	"fmt"
+
+	"a.b.c/b"
+)
+
+type A struct {
+	B b.B
+}
+
+func Func() {
+	fmt.Println(A{}.B.C.V)
+}
