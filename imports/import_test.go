@@ -1,4 +1,4 @@
-package matcher
+package imports
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/goghcrow/go-ast-matcher"
 	"golang.org/x/tools/txtar"
 )
 
@@ -38,7 +39,7 @@ func TestOptimizeImports(t *testing.T) {
 			fatalIf(t, err)
 		}
 
-		m := NewMatcher(dir, PatternAll, WithLoadDepts()) // mustLoadDepts
+		m := matcher.NewMatcher(dir, matcher.PatternAll, matcher.WithLoadDepts()) // mustLoadDepts
 		m.VisitAllFiles(func(m *Matcher, file *ast.File) {
 			name := m.Filename[len(dir)+1:]
 
@@ -48,11 +49,11 @@ func TestOptimizeImports(t *testing.T) {
 			}
 
 			t.Run(testFile+"/"+name, func(t *testing.T) {
-				OptimizeImports(m, file, "a.b.c/project", []string{"a.b.c/company"})
+				Optimize(m, file, "a.b.c/project", []string{"a.b.c/company"})
 				have := m.FormatFile()
 
 				if strings.TrimSpace(want) != strings.TrimSpace(have) {
-					diff := Diff("have.go", []byte(have), "want.go", []byte(want))
+					diff := matcher.Diff("have.go", []byte(have), "want.go", []byte(want))
 					fmt.Println(string(diff))
 					t.Errorf("stdout:\n")
 					println(have)
@@ -61,5 +62,11 @@ func TestOptimizeImports(t *testing.T) {
 				}
 			})
 		})
+	}
+}
+
+func fatalIf(t *testing.T, err error) {
+	if err != nil {
+		t.Fatal(err)
 	}
 }

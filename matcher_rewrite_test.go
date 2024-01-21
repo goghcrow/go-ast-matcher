@@ -1,12 +1,10 @@
 package matcher
 
 import (
-	"bytes"
 	"fmt"
 	"go/ast"
 	"go/types"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -128,56 +126,4 @@ func TestRewriteRun(t *testing.T) {
 			})
 		})
 	}
-}
-
-func Diff(oldName string, old []byte, newName string, new []byte) []byte {
-	f1, err := writeTempFile(old)
-	panicIfErr(err)
-	//goland:noinspection GoUnhandledErrorResult
-	defer os.Remove(f1)
-
-	f2, err := writeTempFile(new)
-	panicIfErr(err)
-	//goland:noinspection GoUnhandledErrorResult
-	defer os.Remove(f2)
-
-	data, err := exec.Command("diff", "-u", f1, f2).CombinedOutput()
-	if err != nil && len(data) == 0 {
-		panicIfErr(err)
-	}
-
-	if len(data) == 0 {
-		return nil
-	}
-
-	i := bytes.IndexByte(data, '\n')
-	if i < 0 {
-		return data
-	}
-	j := bytes.IndexByte(data[i+1:], '\n')
-	if j < 0 {
-		return data
-	}
-	start := i + 1 + j + 1
-	if start >= len(data) || data[start] != '@' {
-		return data
-	}
-
-	return append([]byte(fmt.Sprintf("diff %s %s\n--- %s\n+++ %s\n", oldName, newName, oldName, newName)), data[start:]...)
-}
-
-func writeTempFile(data []byte) (string, error) {
-	file, err := os.CreateTemp("", "diff")
-	if err != nil {
-		return "", err
-	}
-	_, err = file.Write(data)
-	if err1 := file.Close(); err == nil {
-		err = err1
-	}
-	if err != nil {
-		_ = os.Remove(file.Name())
-		return "", err
-	}
-	return file.Name(), nil
 }

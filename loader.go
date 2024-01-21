@@ -135,6 +135,21 @@ func IsGenerated(file *ast.File) bool {
 
 // Generator copy from go1.21 ast.IsGenerated
 func Generator(file *ast.File) (by string, is bool) {
+	var (
+		cutPrefix = func(s, prefix string) (after string, found bool) {
+			if !strings.HasPrefix(s, prefix) {
+				return s, false
+			}
+			return s[len(prefix):], true
+		}
+		cutSuffix = func(s, suffix string) (before string, found bool) {
+			if !strings.HasSuffix(s, suffix) {
+				return s, false
+			}
+			return s[:len(s)-len(suffix)], true
+		}
+	)
+
 	for _, group := range file.Comments {
 		for _, comment := range group.List {
 			if comment.Pos() > file.Package {
@@ -144,8 +159,8 @@ func Generator(file *ast.File) (by string, is bool) {
 			const prefix = "// Code generated "
 			if strings.Contains(comment.Text, prefix) {
 				for _, line := range strings.Split(comment.Text, "\n") {
-					if rest, ok := strings.CutPrefix(line, prefix); ok {
-						if gen, ok := strings.CutSuffix(rest, " DO NOT EDIT."); ok {
+					if rest, ok := cutPrefix(line, prefix); ok {
+						if gen, ok := cutSuffix(rest, " DO NOT EDIT."); ok {
 							return gen, true
 						}
 					}

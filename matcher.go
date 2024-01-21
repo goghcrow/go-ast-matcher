@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"go/types"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"golang.org/x/tools/go/ast/astutil"
@@ -173,6 +174,17 @@ func (m *Matcher) visitPkgImports(
 	pkg *packages.Package,
 	f func(name *ast.Ident, path string),
 ) {
+	parsePath := func(s *ast.ImportSpec) string {
+		path := s.Path.Value
+		xs := strings.Split(path, " ")
+		if len(xs) > 1 {
+			path = xs[1]
+		}
+		t, err := strconv.Unquote(path)
+		panicIfErr(err)
+		return t
+	}
+
 	m.visitPkgFiles(pkg, func(m *Matcher, file *ast.File) {
 		for _, decl := range file.Decls {
 			d, ok := decl.(*ast.GenDecl)
@@ -180,9 +192,9 @@ func (m *Matcher) visitPkgImports(
 				continue
 			}
 			for _, spec := range d.Specs {
-				iSpec := spec.(*ast.ImportSpec)
-				name := iSpec.Name
-				path := ImportSpecPath(iSpec)
+				s := spec.(*ast.ImportSpec)
+				name := s.Name
+				path := parsePath(s)
 				f(name, path)
 			}
 		}
@@ -1115,18 +1127,18 @@ func (m *Matcher) FormatFile() string {
 	return string(FmtFile(m.FSet, m.File))
 }
 
-func (m *Matcher) ClearImports() {
-	CleanImports(m, m.File)
-}
-
-func (m *Matcher) SortImports(projectPkgPrefix string, companyPkgPrefix []string) {
-	SortImports(m.File, projectPkgPrefix, companyPkgPrefix)
-}
-
-func (m *Matcher) OptimiseImports(projectPkgPrefix string, companyPkgPrefix []string) {
-	OptimizeImports(m, m.File, projectPkgPrefix, companyPkgPrefix)
-}
-
-func (m *Matcher) UsesImport(pkg *types.Package) bool {
-	return UsesImport(m, m.File, pkg)
-}
+// func (m *Matcher) ClearImports() {
+// 	CleanImports(m, m.File)
+// }
+//
+// func (m *Matcher) SortImports(projectPkgPrefix string, companyPkgPrefix []string) {
+// 	SortImports(m.File, projectPkgPrefix, companyPkgPrefix)
+// }
+//
+// func (m *Matcher) OptimiseImports(projectPkgPrefix string, companyPkgPrefix []string) {
+// 	OptimizeImports(m, m.File, projectPkgPrefix, companyPkgPrefix)
+// }
+//
+// func (m *Matcher) UsesImport(pkg *types.Package) bool {
+// 	return UsesImport(m, m.File, pkg)
+// }
