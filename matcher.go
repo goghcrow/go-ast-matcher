@@ -1089,6 +1089,66 @@ func (m *Matcher) LookupFieldOrMethod(pkg, typ, fieldOrMethod string) types.Obje
 	return obj
 }
 
+// ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ TypeInfo ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+
+func (m *Matcher) UpdateType(e ast.Expr, t types.Type) {
+	m.Info.Types[e] = types.TypeAndValue{Type: t}
+}
+
+func (m *Matcher) UpdateUses(idOrSel ast.Expr, obj types.Object) {
+	switch x := idOrSel.(type) {
+	case *ast.Ident:
+		m.Uses[x] = obj
+	case *ast.SelectorExpr:
+		m.Uses[x.Sel] = obj
+	default:
+		panic("unreached")
+	}
+}
+
+func (m *Matcher) UpdateDefs(idOrSel ast.Expr, obj types.Object) {
+	switch x := idOrSel.(type) {
+	case *ast.Ident:
+		m.Defs[x] = obj
+	case *ast.SelectorExpr:
+		m.Defs[x.Sel] = obj
+	default:
+		panic("unreached")
+	}
+}
+
+func (m *Matcher) CopyTypeInfo(new, old ast.Expr) {
+	switch new := new.(type) {
+	case *ast.Ident:
+		orig := old.(*ast.Ident)
+		if obj, ok := m.Info.Defs[orig]; ok {
+			m.Info.Defs[new] = obj
+		}
+		if obj, ok := m.Info.Uses[orig]; ok {
+			m.Info.Uses[new] = obj
+		}
+
+	case *ast.SelectorExpr:
+		orig := old.(*ast.SelectorExpr)
+		if sel, ok := m.Info.Selections[orig]; ok {
+			m.Info.Selections[new] = sel
+		}
+	}
+
+	if tv, ok := m.Info.Types[old]; ok {
+		m.Info.Types[new] = tv
+	}
+}
+
+func (m *Matcher) NewIdent(name string, t types.Type) *ast.Ident {
+	ident := ast.NewIdent(name)
+	m.UpdateType(ident, t)
+
+	obj := types.NewVar(token.NoPos, m.Package, name, t)
+	m.UpdateUses(ident, obj)
+	return ident
+}
+
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ etc ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 func (m *Matcher) ObjectOfCall(call *ast.CallExpr) types.Object {
