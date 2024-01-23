@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/goghcrow/go-ansi"
 	"golang.org/x/tools/go/ast/astutil"
@@ -20,6 +21,48 @@ func CallGraphOfMatcher() {
 	})
 	graph := m.CallGraph(WithCallExprPattern(callExprPtn))
 	graph.Dot().OpenOnline()
+}
+
+func PatternOfIdCompare(m *Matcher) ast.Node {
+	isIdIdent := IdentOf(m, func(id *ast.Ident) bool {
+		// return strings.ToLower(id.Name) == "id"
+		return strings.HasSuffix(strings.ToLower(id.Name), "id")
+	})
+	isIdSel := &ast.SelectorExpr{Sel: isIdIdent}
+	isIdPtn := OrEx[ExprPattern](m,
+		isIdSel,
+		isIdIdent,
+	)
+	isCmpTokPtn := MkPattern[TokenPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		tok := token.Token(n.(TokenNode))
+		return tok == token.LSS || tok == token.GTR || tok == token.LEQ || tok == token.GEQ
+	})
+	notIntLit := Not(m, MkPattern[ExprPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		basic, _ := n.(*ast.BasicLit)
+		if basic == nil {
+			return false
+		}
+		return basic.Kind == token.INT
+	}))
+
+	// return &ast.BinaryExpr{
+	// 	X:  isIdPtn,
+	// 	Op: isCmpTokPtn,
+	// 	Y:  isIdPtn,
+	// }
+
+	return OrEx[ExprPattern](m,
+		&ast.BinaryExpr{
+			X:  isIdPtn,
+			Op: isCmpTokPtn,
+			Y:  notIntLit,
+		},
+		&ast.BinaryExpr{
+			X:  notIntLit,
+			Op: isCmpTokPtn,
+			Y:  isIdPtn,
+		},
+	)
 }
 
 func PatternOfWildcardIdent(m *Matcher) ast.Node {
