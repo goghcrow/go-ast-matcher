@@ -23,6 +23,108 @@ func CallGraphOfMatcher() {
 	graph.Dot().OpenOnline()
 }
 
+// fun(...args) { return return f(...args) }  ==>  f
+func EtaReduction(m *Matcher) {
+	pattern := &ast.FuncLit{
+		Type: &ast.FuncType{
+			Params: MkVar[FieldListPattern](m, "params"),
+		},
+
+		Body: &ast.BlockStmt{
+			List: []ast.Stmt{
+				&ast.ReturnStmt{
+					Results: []ast.Expr{
+						&ast.CallExpr{
+							Fun:  MkVar[ExprPattern](m, "fun"),
+							Args: MkVar[ExprsPattern](m, "args"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// assume type-checked
+	matched := func(m *Matcher, paramsFields []*ast.Field, argsExprs []ast.Expr) bool {
+		if paramsFields == nil && argsExprs == nil {
+			return true
+		}
+		var args []*ast.Ident
+		for _, argExpr := range argsExprs {
+			arg, _ := argExpr.(*ast.Ident)
+			if arg == nil {
+				return false // must be ident
+			}
+			args = append(args, arg)
+		}
+
+		var params []*ast.Ident
+		for _, paramGroup := range paramsFields {
+			for _, param := range paramGroup.Names {
+				params = append(params, param)
+			}
+		}
+
+		if len(args) != len(params) {
+			return false
+		}
+
+		for i, arg := range args {
+			param := params[i]
+			if arg.Name != param.Name {
+				return false
+			}
+			if m.ObjectOf(arg) != m.ObjectOf(param) {
+				return false
+			}
+		}
+
+		return true
+	}
+
+	m.Match(
+		pattern,
+		func(m *Matcher, c *astutil.Cursor, stack []ast.Node, binds Binds) {
+			params := binds["params"].(*ast.FieldList).List
+			args := binds["args"].(ExprsNode)
+			if matched(m, params, args) {
+				c.Replace(binds["fun"])
+			}
+		},
+	)
+}
+
+func PatternOfSecondArgIsCtx(m *Matcher) ast.Node {
+	restWildcard := MkPattern[RestExprPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		// rest := n.(ExprsNode)
+		return true
+	})
+	ctxIface := m.MustLookup("context.Context").Type().Underlying().(*types.Interface)
+	return &ast.CallExpr{
+		Args: []ast.Expr{
+			Wildcard[ExprPattern](m),
+			TypeImplements[ExprPattern](m, ctxIface),
+			restWildcard,
+		},
+	}
+}
+
+func PatternOfSecondStmtIsIf(m *Matcher) ast.Node {
+	restWildcard := MkPattern[RestStmtPattern](m, func(m *Matcher, n ast.Node, stack []ast.Node, binds Binds) bool {
+		// rest := n.(StmtsNode)
+		return true
+	})
+	return &ast.FuncDecl{
+		Body: &ast.BlockStmt{
+			List: []ast.Stmt{
+				Wildcard[StmtPattern](m),
+				&ast.IfStmt{},
+				restWildcard,
+			},
+		},
+	}
+}
+
 func PatternOfIdCompare(m *Matcher) ast.Node {
 	isIdIdent := IdentOf(m, func(id *ast.Ident) bool {
 		// return strings.ToLower(id.Name) == "id"

@@ -22,7 +22,10 @@ import (
 
 type (
 	Pattern interface {
-		NodePattern | StmtPattern | ExprPattern | DeclPattern | SpecPattern |
+		NodePattern |
+			StmtPattern | RestStmtPattern |
+			ExprPattern | RestExprPattern |
+			DeclPattern | SpecPattern |
 			IdentPattern | FieldPattern | FieldListPattern |
 			CallExprPattern | FuncTypePattern | BlockStmtPattern | TokenPattern | BasicLitPattern |
 			SlicePattern
@@ -39,7 +42,9 @@ type (
 
 	NodePattern      = MatchFun
 	StmtPattern      = *ast.BadStmt
+	RestStmtPattern  = *ast.EmptyStmt
 	ExprPattern      = *ast.BadExpr
+	RestExprPattern  = *ast.Ellipsis
 	DeclPattern      = *ast.BadDecl
 	SpecPattern      = *ast.ImportSpec
 	IdentPattern     = *ast.Ident
@@ -85,8 +90,12 @@ func MkPattern[T Pattern](m *Matcher, f MatchFun) T {
 		return any(m.mkNodePattern(f)).(T)
 	case StmtPattern:
 		return any(m.mkStmtPattern(f)).(T)
+	case RestStmtPattern:
+		return any(m.mkRestStmtPattern(f)).(T)
 	case ExprPattern:
 		return any(m.mkExprPattern(f)).(T)
+	case RestExprPattern:
+		return any(m.mkRestExprPattern(f)).(T)
 	case DeclPattern:
 		return any(m.mkDeclPattern(f)).(T)
 	case IdentPattern:
@@ -150,8 +159,12 @@ func TryGetMatchFun[T Pattern](m *Matcher, n any) MatchFun {
 		return m.tryGetNodeMatchFun(n.(ast.Node))
 	case StmtPattern:
 		return m.tryGetStmtMatchFun(n.(ast.Stmt))
+	case RestStmtPattern:
+		return m.tryGetRestStmtMatchFun(n.(ast.Stmt))
 	case ExprPattern:
 		return m.tryGetExprMatchFun(n.(ast.Expr))
+	case RestExprPattern:
+		return m.tryGetRestExprMatchFun(n.(ast.Expr))
 	case DeclPattern:
 		return m.tryGetDeclMatchFun(n.(ast.Decl))
 	case SpecPattern:
@@ -217,10 +230,22 @@ func (m *Matcher) mkStmtPattern(f MatchFun) StmtPattern {
 	return &ast.BadStmt{From: token.Pos(-len(m.funs))}
 }
 
+// MkRestStmtPattern type of callback param node is StmtsNode
+func (m *Matcher) mkRestStmtPattern(f MatchFun) RestStmtPattern {
+	m.funs = append(m.funs, f)
+	return &ast.EmptyStmt{Semicolon: token.Pos(-len(m.funs))}
+}
+
 // MkExprPattern type of callback param node is ast.Expr
 func (m *Matcher) mkExprPattern(f MatchFun) ExprPattern {
 	m.funs = append(m.funs, f)
 	return &ast.BadExpr{From: token.Pos(-len(m.funs))}
+}
+
+// MkRestExprPattern type of callback param node is ExprsNode
+func (m *Matcher) mkRestExprPattern(f MatchFun) RestExprPattern {
+	m.funs = append(m.funs, f)
+	return &ast.Ellipsis{Ellipsis: token.Pos(-len(m.funs))}
 }
 
 // MkDeclPattern type of callback param node is ast.Decl
@@ -341,9 +366,23 @@ func (m *Matcher) tryGetStmtMatchFun(n ast.Stmt) MatchFun {
 	return nil
 }
 
+func (m *Matcher) tryGetRestStmtMatchFun(n ast.Stmt) MatchFun {
+	if x, _ := n.(RestStmtPattern); x != nil && x.Semicolon < 0 {
+		return m.funs[-x.Semicolon-1]
+	}
+	return nil
+}
+
 func (m *Matcher) tryGetExprMatchFun(n ast.Expr) MatchFun {
 	if x, _ := n.(ExprPattern); x != nil && x.From < 0 {
 		return m.funs[-x.From-1]
+	}
+	return nil
+}
+
+func (m *Matcher) tryGetRestExprMatchFun(n ast.Expr) MatchFun {
+	if x, _ := n.(RestExprPattern); x != nil && x.Ellipsis < 0 {
+		return m.funs[-x.Ellipsis-1]
 	}
 	return nil
 }

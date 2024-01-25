@@ -70,6 +70,9 @@ var matchPatterns = map[string]func(m *Matcher) ast.Node{
 	"callee/func_callee_callBuiltin":  PatternOfFunc_callBuiltin,
 	"callee/method_callee_A_Method":   PatternOfMethod_A۰Method,
 	"callee/iface_callee_Show_String": PatternOfIface_Show۰String,
+
+	"rest/exprs": PatternOfSecondArgIsCtx,
+	"rest/stmts": PatternOfSecondStmtIsIf,
 }
 
 func TestMatchRun(t *testing.T) {
@@ -108,7 +111,7 @@ func TestMatchRun(t *testing.T) {
 			t.Run(patternName, func(t *testing.T) {
 				stdout := ""
 
-				m := NewMatcher(dir, PatternAll)
+				m := NewMatcher(dir, PatternAll, WithLoadDepts())
 				m.VisitAllFiles(func(m *Matcher, file *ast.File) {
 					t.Log(patternName)
 					pattern := matchPatterns[patternName](m)
@@ -136,8 +139,10 @@ func TestMatchRun(t *testing.T) {
 				have := stdout
 				want := string(wantStdout.Data)
 				if strings.TrimSpace(want) != strings.TrimSpace(have) {
-					t.Errorf("stdout:\n%s", have)
-					t.Errorf("want:\n%s", want)
+					t.Errorf("stdout:\n")
+					println(have)
+					t.Errorf("want:\n")
+					println(want)
 				}
 			})
 		}

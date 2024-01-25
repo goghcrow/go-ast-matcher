@@ -955,6 +955,23 @@ func (m *Matcher) matchStmts(xs, ys []ast.Stmt, stack []ast.Node, binds Binds) b
 	if matchFun := m.tryGetStmtsMatchFun(xs); matchFun != nil {
 		return matchFun(m, StmtsNode(ys), stack, binds)
 	}
+
+	if len(xs) > 0 {
+		if len(xs)-1 > len(ys) {
+			return false
+		}
+		if matchFun := m.tryGetRestStmtMatchFun(xs[len(xs)-1]); matchFun != nil {
+			// last with the rest pattern
+			i := 0
+			for ; i < len(xs)-1; i++ {
+				if !m.matchStmt(xs[i], ys[i], stack, binds) {
+					return false
+				}
+			}
+			return matchFun(m, StmtsNode(ys[i:]), stack, binds)
+		}
+	}
+
 	if len(xs) != len(ys) {
 		return false
 	}
@@ -975,6 +992,23 @@ func (m *Matcher) matchExprs(xs, ys []ast.Expr, stack []ast.Node, binds Binds) b
 	if matchFun := m.tryGetExprsMatchFun(xs); matchFun != nil {
 		return matchFun(m, ExprsNode(ys), stack, binds)
 	}
+
+	if len(xs) > 0 {
+		if len(xs)-1 > len(ys) {
+			return false
+		}
+		if matchFun := m.tryGetRestExprMatchFun(xs[len(xs)-1]); matchFun != nil {
+			// last with the rest pattern
+			i := 0
+			for ; i < len(xs)-1; i++ {
+				if !m.matchExpr(xs[i], ys[i], stack, binds) {
+					return false
+				}
+			}
+			return matchFun(m, ExprsNode(ys[i:]), stack, binds)
+		}
+	}
+
 	if len(xs) != len(ys) {
 		return false
 	}

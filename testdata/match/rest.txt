@@ -1,0 +1,52 @@
+
+-- exprs.stdout --
+node: f1(1, ctx)
+
+node: f2(1, ctx, 2)
+
+-- stmts.stdout --
+node: func f1(a int, ctx context.Context) {
+	println(42)
+	if true {
+		println(100)
+	}
+}
+
+node: func f2(a int, ctx context.Context, b int) {
+	println(42)
+	if true {
+		println(100)
+	}
+	println(42)
+}
+
+-- a/a.go --
+package main
+
+import "context"
+
+func main() {
+	ctx := context.Background()
+	f0(ctx)
+	f1(1, ctx)
+	f2(1, ctx, 2)
+}
+
+func f0(ctx context.Context) {
+    println(42)
+}
+
+func f1(a int, ctx context.Context) {
+    println(42)
+    if true {
+        println(100)
+    }
+}
+
+func f2(a int, ctx context.Context, b int) {
+    println(42)
+    if true {
+        println(100)
+    }
+    println(42)
+}
