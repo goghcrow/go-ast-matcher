@@ -1185,6 +1185,37 @@ func (m *Matcher) NewIdent(name string, t types.Type) *ast.Ident {
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ etc ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
+type (
+	Def = *ast.Ident
+	Use = *ast.Ident
+)
+
+func (m *Matcher) DefUses() map[Def][]Use {
+	obj2uses := map[types.Object][]*ast.Ident{}
+	def2Objs := map[*ast.Ident]types.Object{}
+
+	m.VisitAllPackages(nil, func(pkg *packages.Package) {
+		info := pkg.TypesInfo
+		for id, obj := range info.Uses {
+			obj2uses[obj] = append(obj2uses[obj], id)
+		}
+		for id, obj := range info.Defs {
+			if def2Objs[id] != nil {
+				panic("dup")
+			}
+			def2Objs[id] = obj
+		}
+	})
+
+	useMap := map[Def][]Use{}
+	for def, obj := range def2Objs {
+		for _, use := range obj2uses[obj] {
+			useMap[def] = append(useMap[def], use)
+		}
+	}
+	return useMap
+}
+
 func (m *Matcher) ObjectOfCall(call *ast.CallExpr) types.Object {
 	return typeutil.Callee(m.Info, call)
 }
