@@ -1192,7 +1192,7 @@ type (
 
 func (m *Matcher) DefUses() map[Def][]Use {
 	obj2uses := map[types.Object][]*ast.Ident{}
-	def2Objs := map[*ast.Ident]types.Object{}
+	def2Objs := map[*ast.Ident][]types.Object{} // test and non-test
 
 	m.VisitAllPackages(nil, func(pkg *packages.Package) {
 		info := pkg.TypesInfo
@@ -1200,17 +1200,16 @@ func (m *Matcher) DefUses() map[Def][]Use {
 			obj2uses[obj] = append(obj2uses[obj], id)
 		}
 		for id, obj := range info.Defs {
-			if def2Objs[id] != nil {
-				panic("dup")
-			}
-			def2Objs[id] = obj
+			def2Objs[id] = append(def2Objs[id], obj)
 		}
 	})
 
 	useMap := map[Def][]Use{}
-	for def, obj := range def2Objs {
-		for _, use := range obj2uses[obj] {
-			useMap[def] = append(useMap[def], use)
+	for def, objs := range def2Objs {
+		for _, obj := range objs {
+			for _, use := range obj2uses[obj] {
+				useMap[def] = append(useMap[def], use)
+			}
 		}
 	}
 	return useMap
