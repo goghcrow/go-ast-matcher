@@ -28,7 +28,7 @@ type MatchFlags struct {
 	matchCallEllipsis bool
 	pkgFilter         func(pkg *packages.Package) bool
 	fileFilter        func(filename string, file *ast.File) bool
-	genFilter         func(filename string, gen GeneratedBy, file *ast.File) bool
+	genFilter         func(filename string, gen GenBy, file *ast.File) bool
 }
 
 type MatchOption func(*MatchFlags)
@@ -52,19 +52,19 @@ func WithPkgFilter(f func(pkg *packages.Package) bool) MatchOption {
 func WithFileFilter(f func(filename string, file *ast.File) bool) MatchOption {
 	return func(opts *MatchFlags) { opts.fileFilter = f }
 }
-func WithGenFilter(f func(filename string, gen GeneratedBy, file *ast.File) bool) MatchOption {
+func WithGenFilter(f func(filename string, by GenBy, file *ast.File) bool) MatchOption {
 	return func(opts *MatchFlags) { opts.genFilter = f }
 }
 func WithSkipGenerated() MatchOption {
 	return func(opts *MatchFlags) {
-		opts.genFilter = func(filename string, gen GeneratedBy, file *ast.File) bool {
+		opts.genFilter = func(filename string, by GenBy, file *ast.File) bool {
 			return false
 		}
 	}
 }
 func skipTestMain() MatchOption {
-	return WithGenFilter(func(_ string, gen GeneratedBy, _ *ast.File) bool {
-		return gen != "by 'go test'."
+	return WithGenFilter(func(_ string, by GenBy, _ *ast.File) bool {
+		return by != "by 'go test'."
 	})
 }
 

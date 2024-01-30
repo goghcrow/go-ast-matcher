@@ -3,5 +3,6 @@
 .idea/
 todo.txt
 tmp_test.go
+imports/tmp_test.go
 callgraph_test.go
 legacy

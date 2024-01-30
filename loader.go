@@ -13,7 +13,7 @@ import (
 type (
 	PackagePath = string
 	FileName    = string
-	GeneratedBy = string
+	GenBy       = string
 )
 
 var (
@@ -60,7 +60,7 @@ func NewLoader() *Loader {
 		FSet:      token.NewFileSet(),
 		Init:      []*packages.Package{},
 		All:       map[PackagePath]*packages.Package{},
-		Generated: map[FileName]GeneratedBy{},
+		Generated: map[FileName]GenBy{},
 	}
 }
 
