@@ -9,11 +9,20 @@ import (
 	"go/types"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
 
 	"golang.org/x/tools/go/ast/astutil"
 )
+
+func preOrder(root ast.Node, f astutil.ApplyFunc) {
+	astutil.Apply(root, f, nil)
+}
+
+func postOrder(root ast.Node, f astutil.ApplyFunc) {
+	astutil.Apply(root, nil, f)
+}
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓ Type ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
@@ -135,18 +144,18 @@ func parseBuildTag(f *ast.File) string {
 
 func Diff(oldName string, old []byte, newName string, new []byte) []byte {
 	f1, err := writeTempFile(old)
-	panicIfErr(err)
+	panicIf(err)
 	//goland:noinspection GoUnhandledErrorResult
 	defer os.Remove(f1)
 
 	f2, err := writeTempFile(new)
-	panicIfErr(err)
+	panicIf(err)
 	//goland:noinspection GoUnhandledErrorResult
 	defer os.Remove(f2)
 
 	data, err := exec.Command("diff", "-u", f1, f2).CombinedOutput()
 	if err != nil && len(data) == 0 {
-		panicIfErr(err)
+		panicIf(err)
 	}
 
 	if len(data) == 0 {
@@ -185,12 +194,12 @@ func writeTempFile(data []byte) (string, error) {
 	return file.Name(), nil
 }
 
-func preOrder(root ast.Node, f astutil.ApplyFunc) {
-	astutil.Apply(root, f, nil)
-}
-
-func postOrder(root ast.Node, f astutil.ApplyFunc) {
-	astutil.Apply(root, nil, f)
+func mustMkDir(dir string) string {
+	dir, err := filepath.Abs(dir)
+	panicIf(err)
+	err = os.MkdirAll(dir, os.ModePerm)
+	panicIf(err)
+	return dir
 }
 
 func errLog(a ...any) {
@@ -201,7 +210,7 @@ func exitOf(msg string) {
 	os.Exit(1)
 }
 
-func panicIfErr(err error) {
+func panicIf(err error) {
 	if err != nil {
 		panic(err)
 	}

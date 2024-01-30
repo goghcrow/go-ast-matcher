@@ -181,7 +181,7 @@ func (m *Matcher) visitPkgImports(
 			path = xs[1]
 		}
 		t, err := strconv.Unquote(path)
-		panicIfErr(err)
+		panicIf(err)
 		return t
 	}
 

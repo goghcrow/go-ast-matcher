@@ -74,7 +74,7 @@ func (d *Loader) Load(dir string, patterns []string, flags LoadFlags) {
 	}
 
 	dir, err := filepath.Abs(dir)
-	panicIfErr(err)
+	panicIf(err)
 
 	d.Cfg = &packages.Config{
 		Fset:       d.FSet,
@@ -88,7 +88,7 @@ func (d *Loader) Load(dir string, patterns []string, flags LoadFlags) {
 	}
 	patterns = append(patterns)
 	d.Init, err = packages.Load(d.Cfg, patterns...)
-	panicIfErr(err)
+	panicIf(err)
 
 	if len(d.Init) == 0 {
 		errLog("no packages found")

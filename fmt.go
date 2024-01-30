@@ -9,32 +9,34 @@ import (
 	"go/token"
 	"io"
 	"os"
+	"path/filepath"
 )
 
 // ↓↓↓↓↓↓↓↓↓↓↓↓ format ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 func WriteFile(fset *token.FileSet, filename string, f *ast.File, comment string) {
+	mustMkDir(filepath.Dir(filename))
 	fh, err := os.Create(filename)
-	panicIfErr(err)
+	panicIf(err)
 	defer func() {
 		err = fh.Close()
-		panicIfErr(err)
+		panicIf(err)
 	}()
 
 	if comment == "" {
 		err = format.Node(fh, fset, f)
-		panicIfErr(err)
+		panicIf(err)
 		return
 	}
 
 	src := FmtFile(fset, f)
 	if !bytes.HasPrefix(src, []byte(comment)) {
 		_, err = fmt.Fprint(fh, comment)
-		panicIfErr(err)
+		panicIf(err)
 	}
 
 	_, err = fh.Write(src)
-	panicIfErr(err)
+	panicIf(err)
 }
 
 func GeneratedBy(by string) string {
@@ -50,14 +52,14 @@ func WriteGeneratedFile(fset *token.FileSet, filename string, f *ast.File, by st
 func FmtFile(fset *token.FileSet, f *ast.File) []byte {
 	buf := new(bytes.Buffer)
 	err := format.Node(buf, fset, f)
-	panicIfErr(err)
+	panicIf(err)
 	return buf.Bytes()
 }
 
 func WriteFileRaw(output io.Writer, f *ast.File) {
 	p := printer.Config{Tabwidth: 8, Mode: printer.RawFormat | normalizeNumbers}
 	err := p.Fprint(output, token.NewFileSet(), f)
-	panicIfErr(err)
+	panicIf(err)
 }
 
 const normalizeNumbers = 1 << 30
