@@ -1,7 +1,8 @@
-## [WIP] go-ast-matcher
+# 𝐖𝐡𝐚𝐭 𝐢𝐬 𝕘𝕠-𝕒𝕤𝕥-𝕞𝕒𝕥𝕔𝕙𝕖𝕣
 
-Match and rewrite ast by pattern. see
+A Golang AST Matcher And Rewriter Library.
 
-- [pattern example](./example_test.go)
-- [match example](./match_test.go) and [testdata](./testdata/match)
-- [rewrite example](./rewrite_test.go) and [testdata](./testdata/rewrite)
+- [matcher_example](https://github.com/goghcrow/go-matcher/tree/main/example)
+- [pattern_combinator](https://github.com/goghcrow/go-matcher/tree/main/combinator)
+- [example](./example)
+- [match_and_rewrite example](./matcher_test.go)

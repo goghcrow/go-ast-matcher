@@ -24,4 +24,3 @@ Uniqueness of identifiers
 Given a set of identifiers, an identifier is called unique if it is different from every other in the set.
 Two identifiers are different if they are spelled differently, or if they appear in different packages and are not exported.
 Otherwise, they are the same.
-
