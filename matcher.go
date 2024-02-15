@@ -13,7 +13,7 @@ type (
 		Loader  *loader.Loader
 		Matcher *matcher.Matcher
 	}
-	Cursor = *astutil.Cursor
+	Cursor = astutil.Cursor
 )
 
 type Ctx struct {
@@ -34,9 +34,9 @@ func New(l *loader.Loader, m *matcher.Matcher) ASTMatcher {
 }
 
 // Match by pattern in all packages
-func (m ASTMatcher) Match(ptn ast.Node, cb func(Cursor, Ctx)) {
+func (m ASTMatcher) Match(ptn ast.Node, cb func(*Cursor, Ctx)) {
 	m.Loader.VisitAllFiles(func(f *loader.File) {
-		m.Matcher.Match(f.Pkg, ptn, f.File, func(c Cursor, ctx *matcher.MatchCtx) {
+		m.Matcher.Match(f.Pkg, ptn, f.File, func(c *Cursor, ctx *matcher.MatchCtx) {
 			cb(c, Ctx{ctx, f})
 		})
 	})

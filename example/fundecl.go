@@ -28,7 +28,7 @@ func GrepFuncDeclWithSpecTypeOfParam(dir string, qualifiedType string, opts ...l
 		},
 	)
 
-	am.Match(pattern, func(c Cursor, ctx Ctx) {
+	am.Match(pattern, func(c *Cursor, ctx Ctx) {
 		fmt.Println("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
 		fmt.Println(ansi.Blue.Text(ctx.File.Filename))
 		fmt.Println(l.ShowNode(c.Node()))
@@ -50,7 +50,7 @@ func GrepNestedFuncLit(dir string) {
 		}
 		return nil
 	}
-	am.Match(&ast.FuncLit{}, func(c Cursor, ctx Ctx) {
+	am.Match(&ast.FuncLit{}, func(c *Cursor, ctx Ctx) {
 		outer := outerFuncLit(ctx.Stack[1:]) // exclude self
 		if outer == nil {
 			return

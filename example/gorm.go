@@ -28,7 +28,7 @@ func GrepGormTabler(dir string) {
 	// types.Named -> types.Interface
 	gormTabler := l.MustLookupType("gorm.io/gorm/schema.Tabler").Underlying().(*types.Interface)
 	pattern := example.PatternOfGormTabler(m, gormTabler)
-	am.Match(pattern, func(c Cursor, ctx Ctx) {
+	am.Match(pattern, func(c *Cursor, ctx Ctx) {
 		fmt.Println("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
 		fmt.Println(ansi.Blue.Text(ctx.File.Filename))
 		typeId := ctx.Binds["typeId"].(*ast.Ident)
@@ -47,7 +47,7 @@ func GrepGormTablerTableName(dir string) {
 	// types.Named -> types.Interface
 	gormTabler := l.MustLookupType("gorm.io/gorm/schema.Tabler").Underlying().(*types.Interface)
 	pattern := example.PatternOfGormTablerTableName(m, gormTabler)
-	am.Match(pattern, func(c Cursor, ctx Ctx) {
+	am.Match(pattern, func(c *Cursor, ctx Ctx) {
 		fmt.Println("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
 		fmt.Println(ansi.Blue.Text(ctx.File.Filename))
 		fmt.Println(l.ShowNode(c.Node()))
@@ -64,7 +64,7 @@ func GrepDBProxy(dir string) {
 	am := New(l, m)
 
 	pattern := example.PatternOfGetDBProxy(am.Matcher)
-	am.Match(pattern, func(c Cursor, ctx Ctx) {
+	am.Match(pattern, func(c *Cursor, ctx Ctx) {
 		fmt.Println("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
 		fmt.Println(ansi.Blue.Text(ctx.File.Filename))
 		fmt.Println(l.ShowNode(c.Node()))
@@ -156,7 +156,7 @@ func GrepGormChainAPI(dir string, filter func(ASTMatcher, Ctx, *ast.FuncDecl) bo
 
 	calls := map[rootNode]outerFun{}
 
-	am.Match(pattern, func(c Cursor, ctx Ctx) {
+	am.Match(pattern, func(c *Cursor, ctx Ctx) {
 		collectChainCalls(am, ctx, calls, ctx.Stack)
 	})
 

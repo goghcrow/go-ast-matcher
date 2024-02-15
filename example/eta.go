@@ -71,7 +71,7 @@ func EtaReduction(am ASTMatcher) {
 
 	am.Match(
 		pattern,
-		func(c Cursor, ctx Ctx) {
+		func(c *Cursor, ctx Ctx) {
 			params := ctx.Binds["params"].(*ast.FieldList).List
 			args := ctx.Binds["args"].(ExprsNode)
 			if matched(ctx, params, args) {

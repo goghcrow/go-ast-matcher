@@ -136,7 +136,7 @@ func TestMatchRun(t *testing.T) {
 					t.Log(patternName)
 					pattern := matchPatterns[patternName](am)
 
-					m.Match(file.Pkg, pattern, file.File, func(c matcher.Cursor, ctx *matcher.MatchCtx) {
+					m.Match(file.Pkg, pattern, file.File, func(c *matcher.Cursor, ctx *matcher.MatchCtx) {
 						n := c.Node()
 						parent := c.Parent()
 						bind := ctx.Binds["var"]
@@ -173,7 +173,7 @@ func TestMatchRun(t *testing.T) {
 //goland:noinspection NonAsciiCharacters
 var rewriteTests = map[string]struct {
 	match   func(m *Matcher) ast.Node
-	rewrite func(Cursor, *MatchCtx, *loader.File)
+	rewrite func(*Cursor, *MatchCtx, *loader.File)
 }{
 	// errors.New(fmt.Sprintf(...)) -> fmt.Errorf(...)
 	"S1028.txt": {
@@ -201,7 +201,7 @@ var rewriteTests = map[string]struct {
 				}),
 			)
 		},
-		rewrite: func(c matcher.Cursor, ctx *matcher.MatchCtx, f *loader.File) {
+		rewrite: func(c *matcher.Cursor, ctx *matcher.MatchCtx, f *loader.File) {
 			// todo: need to optimise imports
 			astutil.AddImport(ctx.Pkg.Fset, f.File, "fmt")
 			c.Replace(&ast.CallExpr{
@@ -224,7 +224,7 @@ var rewriteTests = map[string]struct {
 				Args: matcher.MkVar[matcher.ExprsPattern](m, "args"),
 			}
 		},
-		rewrite: func(c matcher.Cursor, ctx *matcher.MatchCtx, f *loader.File) {
+		rewrite: func(c *matcher.Cursor, ctx *matcher.MatchCtx, f *loader.File) {
 			// todo: need to optimise imports
 			astutil.AddImport(ctx.Pkg.Fset, f.File, "fmt")
 			c.Replace(&ast.CallExpr{
@@ -272,7 +272,7 @@ func TestRewriteRun(t *testing.T) {
 		l.VisitAllFiles(func(f *loader.File) {
 			name := filepath.Base(f.Filename)
 			t.Run(testFile+"/"+name, func(t *testing.T) {
-				m.Match(f.Pkg, testCase.match(m), f.File, func(c matcher.Cursor, ctx *matcher.MatchCtx) {
+				m.Match(f.Pkg, testCase.match(m), f.File, func(c *matcher.Cursor, ctx *matcher.MatchCtx) {
 					testCase.rewrite(c, ctx, f)
 				})
 				have := l.FormatFile(f.File)

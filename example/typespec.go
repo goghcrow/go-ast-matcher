@@ -20,7 +20,7 @@ func GrepInterface(dir string) {
 	// match by typeSpec
 	am.Match(&ast.TypeSpec{
 		Type: &ast.InterfaceType{},
-	}, func(c Cursor, ctx Ctx) {
+	}, func(c *Cursor, ctx Ctx) {
 		typeSpec := c.Node().(*ast.TypeSpec)
 		fmt.Println("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
 		fmt.Println(ansi.Blue.Text(l.ShowPos(typeSpec)))
@@ -31,7 +31,7 @@ func GrepInterface(dir string) {
 	// match by type
 	am.Match(&ast.TypeSpec{
 		Name: matcher.MkVar[IdentPattern](m, "typeName"), // Bind[IdentPattern](m, "typeName", Wildcard[IdentPattern](m)),
-	}, func(c Cursor, ctx Ctx) {
+	}, func(c *Cursor, ctx Ctx) {
 		id := ctx.Binds["typeName"].(*ast.Ident)
 		iface, _ := ctx.TypeOf(id).Underlying().(*types.Interface)
 		if iface == nil {
