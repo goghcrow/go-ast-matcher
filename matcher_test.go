@@ -275,7 +275,8 @@ func TestRewriteRun(t *testing.T) {
 				m.Match(f.Pkg, testCase.match(m), f.File, func(c *matcher.Cursor, ctx *matcher.MatchCtx) {
 					testCase.rewrite(c, ctx, f)
 				})
-				have := l.FormatFile(f.File)
+
+				have := f.Format()
 				want := wants[name+".stdout"]
 				if strings.TrimSpace(want) != strings.TrimSpace(have) {
 					diff := Diff("have.go", []byte(have), "want.go", []byte(want))
