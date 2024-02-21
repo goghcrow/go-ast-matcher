@@ -1,7 +1,7 @@
 github.com/goghcrow/go-ansi v1.0.1 h1:ltEkCF0dcongBrJ6dF2XB6pLf7R8gPdhqusQU5Q+5QM=
 github.com/goghcrow/go-ansi v1.0.1/go.mod h1:YbYHdqfxRRpBAuwz6ALgWOimYgL7L6pkZYFcDWNVNRE=
-github.com/goghcrow/go-loader v0.0.4-0.20240221112352-2db4048c3a47 h1:WUE0h/ODD2ic5Jd/cys01+sNiYfrddGJ3Ygm7PnFuvY=
-github.com/goghcrow/go-loader v0.0.4-0.20240221112352-2db4048c3a47/go.mod h1:Jwk+b7diJUFjz5r/KQuhgb5+UuLSfoe6bb9XPTNp+Bs=
+github.com/goghcrow/go-loader v0.0.4-0.20240221113906-cab11067771f h1:etw5MeYe81d/1Hae9iUBMYFGf9I6gD84NR38RbgAc28=
+github.com/goghcrow/go-loader v0.0.4-0.20240221113906-cab11067771f/go.mod h1:Jwk+b7diJUFjz5r/KQuhgb5+UuLSfoe6bb9XPTNp+Bs=
 github.com/goghcrow/go-matcher v0.0.5-0.20240221112341-6675288f4167 h1:7X3Fjs9xFZBoB0nTyWyuGxt7BMwnaKMLe54ag1FHkmQ=
 github.com/goghcrow/go-matcher v0.0.5-0.20240221112341-6675288f4167/go.mod h1:iHjdTemLoaPrEGyq8zQDIR0X6eeyWAYJCSx0kkoFjGw=
 golang.org/x/mod v0.15.0 h1:SernR4v+D55NyBH2QiEQrlBAnj1ECL6AGrA5+dPaMY8=
